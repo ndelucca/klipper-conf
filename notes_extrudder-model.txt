@@ -1,0 +1,115 @@
+CR Touch offsets :
+
+x_offset: -48
+
+y_offset: 0
+
+Offsets for cylindrical probe ABL, EZABL...
+
+8 mm diameter :
+
+x_offset: -48
+
+y_offset: -6
+
+18 mm diameter :
+
+x_offset: -49.5
+
+y_offset: -13.1
+
+Assembly and hardware:
+
+With 4020 fan :
+
+    2x M3 16 mm screws
+
+    1x screw M3 5 mm
+
+    2x M3 nuts (probe)
+
+With 5015 fan:
+
+    2x M3 screws 18 mm
+
+    2x M3 5 mm screws
+
+    2x M3 nuts (probe)
+
+With KLIPPER
+
+You can modify the offset in the "printer.cfg" file.
+
+Here are my settings, which you may need to adapt on your printer. If necessary, you can find all the information directly on the Klipper website link
+
+[bltouch]
+
+x_offset: -48
+
+y_offset: 0
+
+You may also need to adjust your mesh and end positions.
+
+Here are the values I use that work for me:
+
+[stepper_x]
+
+position_endstop: -4
+
+position_min: -4
+
+position_max: 254
+
+If, during meshing, your extruder carriage hits the metal part at the stop of the X axis, you must reduce your "position_max" of the X axis.
+
+[stepper_y]
+
+position_endstop: -2
+
+position_min: -2
+
+position_max: 235
+
+[bed_mesh]
+
+mesh_min: 30, 30
+
+mesh_max: 205, 205
+
+If you get an error when meshing, it's probably because you need to reduce the mesh because it's larger than your "position_max". Try for example:
+
+*bed_mesh]
+
+mesh_min: 35, 35
+
+mesh_max: 200, 200*
+
+To center your Z home in the middle of the board:
+
+[safe_z_home]
+
+home_xy_position: 165, 116
+
+To set the fan speed to 60%, for example:
+
+[heater_fan hotend_fan]
+
+fan_speed : 0.6
+
+Then perform a PID calibration with your new fan speed.
+
+With Marlin
+
+/!\ I don't know if it's possible to vary the hotend fan speed from the original firmware. The power of the 4020 or 5015 fan at 100% speed will certainly be too high.
+
+It is possible to reduce the fan speed with a voltage step-down device.
+
+You can use gcode commands to modify the position of the CR-Touch probe.
+
+Download and install Pronterface and connect your printer via USB.
+
+Then, in the terminal on the right, you should be able to use the M851 gcode, e.g. M851 X-48 Y0
+
+Then use M500 to save them, and M501 to set them as the active configuration.
+
+You can check this using the M503 command.
