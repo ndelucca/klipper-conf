@@ -394,8 +394,9 @@ footer{
     <li><a href="#s7">Cómo Orca frena solo</a></li>
     <li><a href="#s8">Lo que falta calibrar</a></li>
     <li><a href="#s9">Verificación</a></li>
-    <li><a href="#s10">Backup</a></li>
-    <li><a href="#s11">Decisiones</a></li>
+    <li><a href="#s10">Revisión de calidad</a></li>
+    <li><a href="#s11">Backup</a></li>
+    <li><a href="#s12">Decisiones</a></li>
   </ol>
 </nav>
 
@@ -464,7 +465,7 @@ footer{
  [input_shaper]        NO CONFIGURADO
  pressure_advance      NO CONFIGURADO</pre></div>
 
-  <p>Los módulos <code>[exclude_object]</code> y <code>[gcode_arcs]</code> sí están presentes, así que el perfil aprovecha los dos.</p>
+  <p><code>[exclude_object]</code> está presente y el perfil lo aprovecha. <code>[gcode_arcs]</code> también, pero con su <code>resolution</code> por defecto de <strong>1 mm</strong>, demasiado grueso para radios chicos: ver la sección 5.</p>
 </section>
 
 <!-- ================= 3 ================= -->
@@ -605,7 +606,7 @@ END_PRINT</pre></div>
       <tr><td>Relleno</td><td class="n">15 % grid</td><td class="n">15 % grid</td><td class="n">40 % cubic</td><td class="n">10 % grid</td></tr>
       <tr><td>Techo superior</td><td class="n">0.84 mm</td><td class="n">0.80 mm</td><td class="n">1.00 mm</td><td class="n">0.84 mm</td></tr>
       <tr><td>Base</td><td class="n">0.60 mm</td><td class="n">0.60 mm</td><td class="n">0.80 mm</td><td class="n">0.56 mm</td></tr>
-      <tr><td>Pared exterior</td><td class="n">55 mm/s</td><td class="n">60 mm/s</td><td class="n">55 mm/s</td><td class="n">50 mm/s</td></tr>
+      <tr><td>Pared exterior</td><td class="n">45 mm/s</td><td class="n">50 mm/s</td><td class="n">50 mm/s</td><td class="n">50 mm/s</td></tr>
       <tr><td>Pared interior</td><td class="n">120 mm/s</td><td class="n">110 mm/s</td><td class="n">100 mm/s</td><td class="n">80 mm/s</td></tr>
       <tr><td>Relleno disperso</td><td class="n">140 mm/s</td><td class="n">120 mm/s</td><td class="n">110 mm/s</td><td class="n">75 mm/s</td></tr>
       <tr><td>Relleno sólido</td><td class="n">130 mm/s</td><td class="n">120 mm/s</td><td class="n">110 mm/s</td><td class="n">80 mm/s</td></tr>
@@ -623,8 +624,8 @@ END_PRINT</pre></div>
   </ul>
 
   <h3>Aceleraciones, idénticas en los cuatro</h3>
-  <div class="term"><pre> Pared exterior            1000 mm/s2   &lt;- la mitad del techo, minimiza ringing
- Superficie superior       1000 mm/s2
+  <div class="term"><pre> Pared exterior             700 mm/s2   &lt;- lo que se ve, lo mas suave posible
+ Superficie superior        700 mm/s2
  Pared interior            2000 mm/s2
  Relleno sólido            2000 mm/s2
  General                   2000 mm/s2
@@ -643,7 +644,7 @@ END_PRINT</pre></div>
       <tr><td><code>ensure_vertical_shell_thickness</code></td><td class="n">moderate</td><td>Evita agujeros en paredes casi verticales sin inflar el tiempo</td></tr>
       <tr><td><code>seam_position</code></td><td class="n">aligned</td><td>Costura alineada en una columna</td></tr>
       <tr><td><code>staggered_inner_seams</code></td><td class="n">sí</td><td>Escalona las costuras internas, no se apilan todas</td></tr>
-      <tr><td><code>enable_arc_fitting</code></td><td class="n">sí</td><td>Emite G2/G3 en vez de miles de segmentos rectos. Tu Klipper tiene <code>[gcode_arcs]</code>: g-code más chico y curvas más suaves</td></tr>
+      <tr><td><code>enable_arc_fitting</code></td><td class="n">no</td><td>Klipper tiene <code>[gcode_arcs]</code>, pero su <code>resolution</code> por defecto es 1 mm y parte cada arco en cuerdas de 1 mm, lo que deja facetas en los radios chicos. Apagado, Orca emite segmentos de 0.012 mm y las curvas salen suaves</td></tr>
       <tr><td><code>exclude_object</code></td><td class="n">sí</td><td>Podés cancelar una pieza sola desde Mainsail sin abortar el plato</td></tr>
       <tr><td><code>elefant_foot_compensation</code></td><td class="n">0.15 mm</td><td>Compensa el aplastado de la primera capa</td></tr>
     </tbody>
@@ -831,8 +832,11 @@ END_PRINT</pre></div>
 
   <div class="note">
     <span class="tag">Lo que no está verificado</span>
-    <p>No se laminó una pieza real de punta a punta. El CLI de OrcaSlicer en Windows no puede resolver la herencia de presets de usuario, así que esa vía quedó descartada. La primera impresión de prueba es la validación que falta.</p>
+    <p>El CLI de OrcaSlicer en Windows no resuelve la herencia de presets de usuario, así que no hay forma de laminar automáticamente para comparar. La validación es imprimir.</p>
   </div>
+
+  <h3>Primera impresión real</h3>
+  <p><code>SoporteCocina-Body</code>, 43 min, 4.52 m de PLA, con <code>0.20mm Standard</code> y <code>Printalot PLA</code>. Completada sin problemas y rápida. Los defectos que quedaron fueron sutiles y dispararon la revisión de la sección siguiente: un agujero chico impreso sin soportes salía ligeramente deformado, y los bordes redondeados no salían del todo suaves.</p>
 
   <h3>Primera prueba sugerida</h3>
   <div class="term"><pre> 1. Un cubo de calibración de 20 mm en PLA con 0.20mm Standard.
@@ -847,7 +851,34 @@ END_PRINT</pre></div>
 
 <!-- ================= 10 ================= -->
 <section id="s10">
-  <h2><span class="num">10</span>Backup y restauración</h2>
+  <h2><span class="num">10</span>Revisión de calidad</h2>
+  <div class="rule"></div>
+  <p>Después de la primera impresión real, tres causas concretas con su corrección:</p>
+  <div class="tblwrap"><table>
+    <thead><tr><th>Causa</th><th>Evidencia</th><th>Corrección</th></tr></thead>
+    <tbody>
+      <tr><td>Klipper partía los arcos en cuerdas de 1 mm</td><td><code>[gcode_arcs] resolution = 1.0</code> consultado por API. En un radio de 2 mm son 0.064 mm de faceta</td><td><code>enable_arc_fitting</code> a <strong>0</strong>: Orca emite segmentos de 0.012 mm. G-code más grande, curvas suaves</td></tr>
+      <tr><td>Pressure advance apagado</td><td>El g-code impreso tenía <code>enable_pressure_advance = 0</code> y Klipper reportaba <code>pressure_advance = 0.0</code></td><td>Activado en los 4 filamentos. Orca emite <code>SET_PRESSURE_ADVANCE</code> y <strong>no se toca <code>printer.cfg</code></strong></td></tr>
+      <tr><td>Techo de un agujero sin soporte</td><td>El perímetro en voladizo arrancaba en el aire</td><td><code>overhang_reverse</code> y <code>extra_perimeters_on_overhangs</code> en 1</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="term"><pre> El error de faceta que dejaba Klipper al partir un arco en cuerdas de 1 mm:
+
+   radio del borde      error
+   ---------------------------------
+     2 mm              0.064 mm
+     3 mm              0.042 mm
+     5 mm              0.025 mm
+    20 mm              0.006 mm</pre></div>
+
+  <p>Además, como sin input shaper la amplitud del ringing la manda la aceleración y no la velocidad, la pared exterior y la superficie superior bajaron de 1000 a <strong>700 mm/s²</strong>, y la pared exterior de 60 a <strong>50 mm/s</strong>. El resto del perfil se quedó en el techo de 2000: el relleno y las paredes internas no se ven.</p>
+  <p>El costo en tiempo es del orden del 10 al 15 %. Draft quedó sin tocar: si la pieza tiene que verse bien, va Standard.</p>
+</section>
+
+<!-- ================= 10 ================= -->
+<section id="s11">
+  <h2><span class="num">11</span>Backup y restauración</h2>
   <div class="rule"></div>
   <p>Todo vive en el repositorio git <code>~/3dprint</code>:</p>
   <div class="term"><pre> 3dprint/
@@ -871,8 +902,8 @@ END_PRINT</pre></div>
 </section>
 
 <!-- ================= 11 ================= -->
-<section id="s11">
-  <h2><span class="num">11</span>Decisiones</h2>
+<section id="s12">
+  <h2><span class="num">12</span>Decisiones</h2>
   <div class="rule"></div>
   <div class="tblwrap"><table>
     <thead><tr><th>Decisión</th><th>Motivo</th></tr></thead>

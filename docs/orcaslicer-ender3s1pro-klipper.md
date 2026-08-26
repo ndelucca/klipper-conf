@@ -78,8 +78,9 @@ Leído directamente de `printer.cfg` y `macros.cfg` vía la API de Moonraker.
  pressure_advance      NO CONFIGURADO
 ```
 
-Los módulos `[exclude_object]` y `[gcode_arcs]` sí están presentes, así que el
-perfil aprovecha los dos.
+El módulo `[exclude_object]` está presente y el perfil lo aprovecha.
+`[gcode_arcs]` también está, pero con su `resolution` por defecto de **1 mm**, que
+es demasiado grueso para radios chicos. Ver la sección 5.
 
 ---
 
@@ -267,7 +268,7 @@ resuelve solo Orca (ver sección 7).
 | Relleno | 15% grid | **15% grid** | 40% cubic | 10% grid |
 | Techo superior | 0.84 mm | **0.80 mm** | 1.00 mm | 0.84 mm |
 | Base | 0.60 mm | **0.60 mm** | 0.80 mm | 0.56 mm |
-| Pared exterior | 55 mm/s | **60 mm/s** | 55 mm/s | 50 mm/s |
+| Pared exterior | 45 mm/s | **50 mm/s** | 50 mm/s | 50 mm/s |
 | Pared interior | 120 mm/s | **110 mm/s** | 100 mm/s | 80 mm/s |
 | Relleno disperso | 140 mm/s | **120 mm/s** | 110 mm/s | 75 mm/s |
 | Relleno sólido | 130 mm/s | **120 mm/s** | 110 mm/s | 80 mm/s |
@@ -291,8 +292,8 @@ resuelve solo Orca (ver sección 7).
 ### Aceleraciones (idénticas en los 4)
 
 ```
- Pared exterior            1000 mm/s2      <- la mitad del techo, para minimizar ringing
- Superficie superior       1000 mm/s2
+ Pared exterior             700 mm/s2      <- lo que se ve, lo mas suave posible
+ Superficie superior        700 mm/s2
  Pared interior            2000 mm/s2
  Relleno sólido            2000 mm/s2
  General                   2000 mm/s2
@@ -317,7 +318,7 @@ ringing se nota más.
 | `ensure_vertical_shell_thickness` | ensure_moderate | Evita agujeros en paredes casi verticales sin inflar el tiempo |
 | `seam_position` | aligned | Costura alineada en una columna |
 | `staggered_inner_seams` | sí | Escalona las costuras internas, no se apilan todas |
-| `enable_arc_fitting` | sí | Emite G2/G3 en vez de miles de segmentos rectos. Tu Klipper tiene `[gcode_arcs]`, así que se aprovecha: g-code más chico y curvas más suaves |
+| `enable_arc_fitting` | **no** | Klipper tiene `[gcode_arcs]`, pero su `resolution` por defecto es 1 mm: recibe el arco y lo parte en cuerdas de 1 mm, lo que deja facetas en los radios chicos. Apagado, Orca emite segmentos según `resolution` (0.012 mm) y las curvas salen suaves, a costa de un g-code más grande |
 | `exclude_object` | sí | Tu Klipper tiene `[exclude_object]`. Podés cancelar una pieza sola desde Mainsail sin abortar el plato |
 | `elefant_foot_compensation` | 0.15 mm | Compensa el aplastado de la primera capa |
 | `slowdown_for_curled_perimeters` | sí | Frena donde detecta perímetros que se levantan |
@@ -453,7 +454,7 @@ Ejemplo real con el proceso Standard:
                               --------      --------      ---------
  Relleno disperso 120 mm/s     10.8 ok      frena a 100    frena a 39
  Pared interior   110 mm/s      9.9 ok      frena a 100    frena a 39
- Pared exterior    60 mm/s      5.0 ok       5.0 ok        frena a 39
+ Pared exterior    50 mm/s      4.2 ok       4.2 ok        frena a 39
 ```
 
 Por eso el proceso Standard está afinado para que en **PLA no toque nunca el
@@ -504,9 +505,9 @@ Hacelo en este orden, no salteado, porque cada paso depende del anterior.
     OrcaSlicer -> Calibration -> Pressure Advance (modo Tower)
     Dejé el valor sugerido pre-cargado en cada filamento:
       PLA 0.04   PETG 0.06   ABS 0.05   TPU 0.6
-    Están DESACTIVADOS (enable_pressure_advance = 0).
-    Para activarlo: Filament -> Setting Overrides -> tildar "Enable pressure advance".
+    Ya están ACTIVADOS (enable_pressure_advance = 1).
     Orca emite SET_PRESSURE_ADVANCE al inicio, sin tocar printer.cfg.
+    El test solo sirve para afinar el valor exacto de cada rollo.
 
  4. INPUT SHAPER                                <- requiere tocar printer.cfg
     Con acelerómetro ADXL345: SHAPER_CALIBRATE, después SAVE_CONFIG.
@@ -535,12 +536,12 @@ estos son los valores a cambiar en los 4 procesos:
  [printer] max_accel (Klipper)     2000              4000
  default_acceleration              2000              4000
  inner_wall_acceleration           2000              4000
- outer_wall_acceleration           1000              2500
+ outer_wall_acceleration            700              2500
  top_surface_acceleration          1000              2500
  travel_acceleration               2000              5000
  initial_layer_acceleration         500               500   (no tocar)
 
- outer_wall_speed (Standard)         60                90
+ outer_wall_speed (Standard)         50                90
  inner_wall_speed (Standard)        110               150   (*)
  travel_speed                       250               280
 ```
@@ -576,10 +577,38 @@ corregir ni descartar ninguno.
 Durante la validación apareció un defecto real que quedó corregido: faltaba
 `G92 E0` en el g-code de cambio de capa, obligatorio con extrusión relativa.
 
-**Lo que no está verificado**: no se laminó una pieza real de punta a punta. El
-CLI de OrcaSlicer en Windows no puede resolver la herencia de presets de usuario,
-así que esa vía quedó descartada. La primera impresión de prueba es la
-validación que falta.
+### Primera impresión real
+
+`SoporteCocina-Body`, 43 min, 4.52 m de PLA, con `0.20mm Standard` y
+`Printalot PLA`. Completada sin problemas y rápida. Los defectos que quedaron
+fueron sutiles y dispararon la revisión que documenta la sección siguiente:
+
+- un agujero chico impreso sin soportes salía ligeramente deformado
+- los bordes redondeados no salían del todo suaves
+
+---
+
+## 10. Revisión de calidad
+
+Tres causas concretas, con su corrección:
+
+| Causa | Evidencia | Corrección |
+|---|---|---|
+| Klipper partía los arcos en cuerdas de 1 mm | `[gcode_arcs] resolution = 1.0` consultado por API. En un radio de 2 mm eso son 0.064 mm de faceta | `enable_arc_fitting` a **0**: Orca emite segmentos de 0.012 mm. G-code más grande, curvas suaves |
+| Pressure advance apagado | El g-code impreso tenía `enable_pressure_advance = 0` y Klipper reportaba `pressure_advance = 0.0` | Activado en los 4 filamentos. Orca emite `SET_PRESSURE_ADVANCE` y **no se toca `printer.cfg`** |
+| Techo de un agujero sin soporte | El perímetro en voladizo arrancaba en el aire | `overhang_reverse` y `extra_perimeters_on_overhangs` en 1 |
+
+Además, como sin input shaper la amplitud del ringing la manda la aceleración y
+no la velocidad, la pared exterior y la superficie superior bajaron de 1000 a
+**700 mm/s²**, y la pared exterior de 60 a **50 mm/s**. El resto del perfil se
+quedó en el techo de 2000: el relleno y las paredes internas no se ven.
+
+El costo en tiempo es del orden del 10 al 15 %. Draft quedó sin tocar: si la
+pieza tiene que verse bien, va Standard.
+
+**Lo que sigue sin verificarse**: el CLI de OrcaSlicer en Windows no resuelve la
+herencia de presets de usuario, así que no hay forma de laminar automáticamente
+para comparar. La validación es imprimir.
 
 ### Primera prueba sugerida
 
@@ -595,7 +624,7 @@ validación que falta.
 
 ---
 
-## 10. Backup y restauración
+## 11. Backup y restauración
 
 Todo vive en el repositorio git `~/3dprint`:
 
@@ -629,12 +658,12 @@ directorio de datos y copiá encima `backup/20260826-original/user/`, más el
 
 ---
 
-## 11. Resumen de decisiones
+## 12. Resumen de decisiones
 
 | Decisión | Motivo |
 |---|---|
 | Aceleraciones a 2000 y no más | Es el `max_accel` real de tu `printer.cfg`. Pedir más solo hace que la estimación de tiempo mienta |
-| Pared exterior a 1000 mm/s2 | Sin input shaper, la mitad del techo es lo que mantiene las esquinas limpias |
+| Pared exterior a 700 mm/s2 | Sin input shaper, la amplitud del ringing la manda la aceleración, no la velocidad. Solo se baja donde se ve |
 | 4 procesos y no 4x4 por material | El techo de caudal del filamento hace el ajuste por material automáticamente |
 | Perfiles que heredan en vez de autocontenidos | Sobreviven a las actualizaciones de OrcaSlicer |
 | `compatible_printers` en todo | Listas limpias: solo ves lo que aplica a esta impresora |

@@ -172,13 +172,15 @@ COMMON = {
     "initial_layer_print_height": "0.2",
     "adaptive_layer_height": "0",
 
-    # Aceleraciones
+    # Aceleraciones. Sin input shaper, la amplitud del ringing la manda la
+    # aceleracion (no la velocidad), asi que las superficies que se ven van
+    # bajas y el resto se queda en el techo de 2000.
     "default_acceleration": "2000",
-    "outer_wall_acceleration": "1000",
+    "outer_wall_acceleration": "700",
     "inner_wall_acceleration": "2000",
     "internal_solid_infill_acceleration": "2000",
     "sparse_infill_acceleration": "100%",
-    "top_surface_acceleration": "1000",
+    "top_surface_acceleration": "700",
     "bridge_acceleration": "50%",
     "initial_layer_acceleration": "500",
     "travel_acceleration": "2000",
@@ -190,7 +192,9 @@ COMMON = {
     "travel_speed": "250",
     "travel_speed_z": ["5"],
     "initial_layer_travel_speed": "100",
-    "small_perimeter_speed": ["50%"],
+    # 40% del contorno exterior. Un agujero chico es un perimetro corto: sin
+    # pressure advance calibrado, cuanto mas lento, mas pareja la extrusion.
+    "small_perimeter_speed": ["40%"],
     "small_perimeter_threshold": ["0"],
     "enable_overhang_speed": ["1"],
     "overhang_speed_classic": "0",
@@ -227,10 +231,18 @@ COMMON = {
     "is_infill_first": "0",
     "reduce_infill_retraction": "1",
 
-    # Puentes y voladizos
+    # Puentes y voladizos.
+    # overhang_reverse imprime el perimetro en voladizo en sentido inverso, de
+    # modo que arranque anclado en material solido en vez de en el aire. Junto
+    # con el perimetro extra es lo que endereza el techo de un agujero chico
+    # impreso sin soportes.
     "bridge_flow": "0.95",
     "thick_bridges": "0",
     "slowdown_for_curled_perimeters": "1",
+    "overhang_reverse": "1",
+    "overhang_reverse_threshold": "50%",
+    "overhang_reverse_internal_only": "0",
+    "extra_perimeters_on_overhangs": "1",
 
     # Compensaciones
     "elefant_foot_compensation": "0.15",
@@ -261,10 +273,17 @@ COMMON = {
     "support_on_build_plate_only": "0",
     "support_remove_small_overhang": "1",
 
-    # Salida. arc_fitting y exclude_object aprovechan [gcode_arcs] y
-    # [exclude_object], que estan presentes en printer.cfg
+    # Salida.
+    # arc_fitting DESACTIVADO a proposito. Klipper tiene [gcode_arcs], pero su
+    # `resolution` por defecto es 1.0 mm: recibe el G2/G3 y lo parte en cuerdas
+    # de 1 mm. En un borde de radio chico eso deja facetas visibles
+    # (radio 2 mm -> 0.064 mm de error; radio 5 mm -> 0.025 mm).
+    # Con el arc fitting apagado, Orca emite segmentos segun `resolution`
+    # (0.012 mm) y las curvas salen suaves. Cuesta un gcode mas grande.
+    # Alternativa, si se prefiere archivos chicos: dejarlo en "1" y agregar
+    # `resolution: 0.1` a la seccion [gcode_arcs] de printer.cfg.
     "resolution": "0.012",
-    "enable_arc_fitting": "1",
+    "enable_arc_fitting": "0",
     "exclude_object": "1",
     "gcode_label_objects": "1",
     "enable_prime_tower": "0",
@@ -295,7 +314,7 @@ FINE = _proc("0.12mm Fine " + SUF, "0.12mm Fine @MyKlipper", {
     "top_surface_line_width": "0.4",
     "internal_solid_infill_line_width": "0.42",
     "sparse_infill_line_width": "0.45",
-    "outer_wall_speed": "55",
+    "outer_wall_speed": "45",
     "inner_wall_speed": "120",
     "sparse_infill_speed": "140",
     "internal_solid_infill_speed": "130",
@@ -306,12 +325,12 @@ FINE = _proc("0.12mm Fine " + SUF, "0.12mm Fine @MyKlipper", {
     "initial_layer_speed": "25",
     "initial_layer_infill_speed": "55",
     "overhang_1_4_speed": "0",
-    "overhang_2_4_speed": "40",
-    "overhang_3_4_speed": "22",
+    "overhang_2_4_speed": "35",
+    "overhang_3_4_speed": "20",
     "overhang_4_4_speed": "10",
-    # a 0.12 de capa el ringing se nota mas: 800 en vez de 1000
-    "outer_wall_acceleration": "800",
-    "top_surface_acceleration": "800",
+    # a 0.12 de capa el ringing se nota mas: 600 en vez de 700
+    "outer_wall_acceleration": "600",
+    "top_surface_acceleration": "600",
     "wall_loops": "2",
     "top_shell_layers": "7",
     "top_shell_thickness": "0.84",
@@ -332,7 +351,10 @@ STANDARD = _proc("0.20mm Standard " + SUF, "0.20mm Standard @MyKlipper", {
     "top_surface_line_width": "0.4",
     "internal_solid_infill_line_width": "0.42",
     "sparse_infill_line_width": "0.45",
-    "outer_wall_speed": "60",
+    # La pared exterior es lo unico que se ve. Bajarla de 60 a 50 cuesta poco
+    # tiempo (es una fraccion chica del total) y da extrusion mas pareja
+    # mientras no haya pressure advance calibrado.
+    "outer_wall_speed": "50",
     "inner_wall_speed": "110",
     # 120 mm/s x 0.45 x 0.20 = 10.8 mm3/s, justo debajo del tope de 11 del PLA:
     # asi el perfil corre a la velocidad nominal sin que Orca lo frene solo.
@@ -345,9 +367,9 @@ STANDARD = _proc("0.20mm Standard " + SUF, "0.20mm Standard @MyKlipper", {
     "initial_layer_speed": "25",
     "initial_layer_infill_speed": "60",
     "overhang_1_4_speed": "0",
-    "overhang_2_4_speed": "45",
-    "overhang_3_4_speed": "25",
-    "overhang_4_4_speed": "12",
+    "overhang_2_4_speed": "40",
+    "overhang_3_4_speed": "22",
+    "overhang_4_4_speed": "10",
     "wall_loops": "2",
     "top_shell_layers": "4",
     "top_shell_thickness": "0.8",
@@ -368,7 +390,7 @@ STRONG = _proc("0.20mm Strong " + SUF, "0.20mm Standard @MyKlipper", {
     "top_surface_line_width": "0.4",
     "internal_solid_infill_line_width": "0.44",
     "sparse_infill_line_width": "0.45",
-    "outer_wall_speed": "55",
+    "outer_wall_speed": "50",
     "inner_wall_speed": "100",
     "sparse_infill_speed": "110",
     "internal_solid_infill_speed": "110",
@@ -379,9 +401,9 @@ STRONG = _proc("0.20mm Strong " + SUF, "0.20mm Standard @MyKlipper", {
     "initial_layer_speed": "25",
     "initial_layer_infill_speed": "55",
     "overhang_1_4_speed": "0",
-    "overhang_2_4_speed": "45",
-    "overhang_3_4_speed": "25",
-    "overhang_4_4_speed": "12",
+    "overhang_2_4_speed": "40",
+    "overhang_3_4_speed": "22",
+    "overhang_4_4_speed": "10",
     "wall_loops": "4",
     "top_shell_layers": "5",
     "top_shell_thickness": "1",
@@ -406,7 +428,10 @@ DRAFT = _proc("0.28mm Draft " + SUF, "0.28mm Extra Draft @MyKlipper", {
     "top_surface_line_width": "0.42",
     "internal_solid_infill_line_width": "0.45",
     "sparse_infill_line_width": "0.5",
+    # Draft prioriza tiempo: la pared exterior se queda donde estaba y la
+    # aceleracion vuelve a 1000. Si la pieza tiene que verse bien, va Standard.
     "outer_wall_speed": "50",
+    "outer_wall_acceleration": "1000",
     "inner_wall_speed": "80",
     "sparse_infill_speed": "75",
     "internal_solid_infill_speed": "80",
@@ -464,10 +489,12 @@ def _fil(name, inherits, ftype, extra):
         "slow_down_for_layer_cooling": ["1"],
         "reduce_fan_stop_start_freq": ["1"],
         "enable_overhang_bridge_fan": ["1"],
-        # pressure_advance queda pre-cargado pero DESACTIVADO: activarlo emite
-        # SET_PRESSURE_ADVANCE sin tocar printer.cfg, pero conviene calibrar
-        # primero con Calibration -> Pressure Advance.
-        "enable_pressure_advance": ["0"],
+        # Orca emite SET_PRESSURE_ADVANCE ADVANCE=<valor> al inicio de la
+        # impresion. Es 100% del lado del laminador: no se edita printer.cfg,
+        # no hay SAVE_CONFIG, y al reiniciar Klipper vuelve a 0.
+        # Los valores por material son conservadores y tipicos de un direct
+        # drive; el optimo real sale de Calibration -> Pressure Advance.
+        "enable_pressure_advance": ["1"],
     }
     d.update(extra)
     return d

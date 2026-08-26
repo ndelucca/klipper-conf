@@ -33,7 +33,7 @@
         "1"
     ],
     "enable_pressure_advance": [
-        "0"
+        "1"
     ],
     "cool_plate_temp": [
         "100"
