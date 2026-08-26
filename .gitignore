@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+
+# La URL de la impresora es local y no se versiona: este repo es publico y una
+# instancia de Moonraker expuesta suele quedar sin autenticacion efectiva.
+# Ver src/localhost_.py.
+.printer-host
+
+# Backups de la configuracion previa a cada `orca.py install`. Son estado local
+# de una maquina concreta (rutas personales, geometria de ventanas) y no le
+# sirven a nadie mas.
+backup/
+
+# Basura del sistema
+.DS_Store
+Thumbs.db
+desktop.ini

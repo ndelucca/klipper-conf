@@ -1,0 +1,8 @@
+# Los presets y el codigo van siempre con LF, en cualquier sistema.
+# El repo se usa en Windows, macOS y Linux y `orca.py verify` compara texto.
+* text=auto eol=lf
+
+# Los backups y las configuraciones capturadas de otras maquinas se guardan
+# byte a byte. OrcaSlicer.conf usa CRLF y su checksum MD5 depende del contenido.
+backup/** -text
+reference/** -text
