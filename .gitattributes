@@ -1,0 +1,9 @@
+# Todo el texto se normaliza a LF: `orca.py verify` compara contenido literal y
+# los .cfg de Klipper viajan a una Raspberry con Debian.
+* text=auto eol=lf
+
+# Los binarios de firmware del MCU no se tocan nunca.
+*.bin -text
+
+# Backups de la configuracion previa a cada install: se guardan byte a byte.
+backup/** -text

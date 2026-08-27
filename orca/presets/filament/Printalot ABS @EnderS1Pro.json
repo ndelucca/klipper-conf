@@ -1,0 +1,146 @@
+{
+    "type": "filament",
+    "name": "Printalot ABS @EnderS1Pro",
+    "inherits": "Generic ABS @System",
+    "from": "User",
+    "is_custom_defined": "0",
+    "version": "2.4.0.1",
+    "filament_settings_id": [
+        "Printalot ABS @EnderS1Pro"
+    ],
+    "filament_vendor": [
+        "Printalot"
+    ],
+    "filament_type": [
+        "ABS"
+    ],
+    "filament_diameter": [
+        "1.75"
+    ],
+    "filament_extruder_variant": [
+        "Direct Drive Standard"
+    ],
+    "compatible_printers": [
+        "EnderS1ProKlipper"
+    ],
+    "slow_down_for_layer_cooling": [
+        "1"
+    ],
+    "reduce_fan_stop_start_freq": [
+        "1"
+    ],
+    "enable_overhang_bridge_fan": [
+        "1"
+    ],
+    "enable_pressure_advance": [
+        "1"
+    ],
+    "cool_plate_temp": [
+        "100"
+    ],
+    "cool_plate_temp_initial_layer": [
+        "100"
+    ],
+    "eng_plate_temp": [
+        "100"
+    ],
+    "eng_plate_temp_initial_layer": [
+        "100"
+    ],
+    "hot_plate_temp": [
+        "100"
+    ],
+    "hot_plate_temp_initial_layer": [
+        "100"
+    ],
+    "textured_plate_temp": [
+        "100"
+    ],
+    "textured_plate_temp_initial_layer": [
+        "100"
+    ],
+    "textured_cool_plate_temp": [
+        "100"
+    ],
+    "textured_cool_plate_temp_initial_layer": [
+        "100"
+    ],
+    "supertack_plate_temp": [
+        "100"
+    ],
+    "supertack_plate_temp_initial_layer": [
+        "100"
+    ],
+    "filament_density": [
+        "1.04"
+    ],
+    "filament_cost": [
+        "30"
+    ],
+    "filament_flow_ratio": [
+        "0.98"
+    ],
+    "filament_max_volumetric_speed": [
+        "10"
+    ],
+    "nozzle_temperature": [
+        "245"
+    ],
+    "nozzle_temperature_initial_layer": [
+        "250"
+    ],
+    "nozzle_temperature_range_low": [
+        "230"
+    ],
+    "nozzle_temperature_range_high": [
+        "270"
+    ],
+    "temperature_vitrification": [
+        "100"
+    ],
+    "filament_shrink": [
+        "100.6%"
+    ],
+    "close_fan_the_first_x_layers": [
+        "3"
+    ],
+    "full_fan_speed_layer": [
+        "0"
+    ],
+    "fan_min_speed": [
+        "0"
+    ],
+    "fan_max_speed": [
+        "15"
+    ],
+    "fan_cooling_layer_time": [
+        "20"
+    ],
+    "overhang_fan_speed": [
+        "25"
+    ],
+    "overhang_fan_threshold": [
+        "25%"
+    ],
+    "slow_down_layer_time": [
+        "15"
+    ],
+    "slow_down_min_speed": [
+        "20"
+    ],
+    "filament_retraction_length": [
+        "0.6"
+    ],
+    "filament_retraction_speed": [
+        "35"
+    ],
+    "activate_air_filtration": [
+        "0"
+    ],
+    "pressure_advance": [
+        "0.05"
+    ],
+    "filament_notes": [
+        "Printalot ABS - 1.75mm. IMPRESORA SIN ENCERRAMIENTO\nVentilador practicamente apagado (0-15%) para evitar delaminado.\nObligatorio en el proceso: Brim tipo outer_only con 8mm de ancho.\nRecomendado: Draft shield = enabled en piezas altas o finas.\nCerrar puertas y ventanas del ambiente, cero corriente de aire.\nPiezas mayores a ~100mm van a warpear igual sin caja.\nCompensacion de contraccion 100.6%. El ABS emite VOC: ventilar despues."
+    ]
+}
