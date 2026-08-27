@@ -75,12 +75,17 @@ Leído directamente de `printer.cfg` y `macros.cfg` vía la API de Moonraker.
    max_z_accel         100 mm/s2
 
  [input_shaper]        NO CONFIGURADO
- pressure_advance      NO CONFIGURADO
+ pressure_advance      lo pone START_PRINT segun el material
 ```
 
 El módulo `[exclude_object]` está presente y el perfil lo aprovecha.
-`[gcode_arcs]` también está, pero con su `resolution` por defecto de **1 mm**, que
-es demasiado grueso para radios chicos. Ver la sección 5.
+`[gcode_arcs]` también, y desde `versions/v3` declara `resolution: 0.1`, que es lo
+que hace seguro el arc fitting. Con el default de 1 mm quedaban facetas visibles
+en los radios chicos.
+
+Estas dependencias ya no se controlan a ojo: las valida
+`python orca/orca.py check` contra `versions/<CURRENT>/`, y CI las corre en cada
+push.
 
 ---
 
@@ -145,7 +150,7 @@ OrcaSlicer.
 
 ### Repositorio
 
-Toda esta configuración vive versionada en `~/3dprint`, con dos capas
+Toda esta configuración vive versionada en `~/nd.printer`, con dos capas
 sincronizadas:
 
 ```
@@ -218,8 +223,7 @@ está en el límite bajo y deja stringing.
 
 ```gcode
 ; machine_start_gcode
-START_PRINT BED_TEMP=[bed_temperature_initial_layer_single] EXTRUDER_TEMP=[nozzle_temperature_initial_layer]
-BED_MESH_PROFILE LOAD=default
+START_PRINT BED_TEMP=[bed_temperature_initial_layer_single] EXTRUDER_TEMP=[nozzle_temperature_initial_layer] MATERIAL=[filament_type]
 
 ; layer_change_gcode
 ;AFTER_LAYER_CHANGE
@@ -232,11 +236,15 @@ END_PRINT
 
 Dos cosas importantes acá:
 
-**`BED_MESH_PROFILE LOAD=default`** es nuevo. Tu macro `START_PRINT` hace `G28`,
-que borra la malla activa, y después nunca la volvía a cargar. Tenés una malla
-6x6 medida y guardada que no se usaba nunca. Ahora se carga en cada impresión.
-Si algún día borrás ese perfil de malla en Klipper, esta línea va a abortar la
-impresión, así que tenelo presente.
+**`MATERIAL=[filament_type]`** es lo que le permite a Klipper poner el pressure
+advance por su cuenta. El macro tiene la tabla por material (`variable_pa`) y el
+laminador solo anuncia cuál está cargado, así que cualquier g-code hereda el PA
+correcto aunque no lo haya generado OrcaSlicer.
+
+**La carga de la malla ya no está acá.** Antes el start gcode hacía
+`BED_MESH_PROFILE LOAD=default`, porque `START_PRINT` hace `G28` y nunca volvía a
+cargarla. Eso ahora lo hace el propio macro, que es donde corresponde: la malla es
+de la máquina, no del laminador. `orca.py check` falla si nadie la carga.
 
 **`G92 E0`** en el cambio de capa es obligatorio: el perfil usa extrusión
 relativa (`M83`, que tu macro ya setea) y sin ese reset se pierde precisión de
@@ -318,7 +326,7 @@ ringing se nota más.
 | `ensure_vertical_shell_thickness` | ensure_moderate | Evita agujeros en paredes casi verticales sin inflar el tiempo |
 | `seam_position` | aligned | Costura alineada en una columna |
 | `staggered_inner_seams` | sí | Escalona las costuras internas, no se apilan todas |
-| `enable_arc_fitting` | **no** | Klipper tiene `[gcode_arcs]`, pero su `resolution` por defecto es 1 mm: recibe el arco y lo parte en cuerdas de 1 mm, lo que deja facetas en los radios chicos. Apagado, Orca emite segmentos según `resolution` (0.012 mm) y las curvas salen suaves, a costa de un g-code más grande |
+| `enable_arc_fitting` | **sí** | Depende de que `limits.cfg` declare `[gcode_arcs] resolution: 0.1`. Con el default de Klipper (1 mm) el arco se parte en cuerdas de 1 mm y en un radio de 2 mm deja 0.064 mm de faceta; con 0.1 mm el error baja a 0.0006 mm y además el g-code es mucho más chico que emitiendo segmentos de 0.012 mm. `orca.py check` valida ese par |
 | `exclude_object` | sí | Tu Klipper tiene `[exclude_object]`. Podés cancelar una pieza sola desde Mainsail sin abortar el plato |
 | `elefant_foot_compensation` | 0.15 mm | Compensa el aplastado de la primera capa |
 | `slowdown_for_curled_perimeters` | sí | Frena donde detecta perímetros que se levantan |
@@ -503,11 +511,14 @@ Hacelo en este orden, no salteado, porque cada paso depende del anterior.
 
  3. PRESSURE ADVANCE                            <- el que más impacto tiene
     OrcaSlicer -> Calibration -> Pressure Advance (modo Tower)
-    Dejé el valor sugerido pre-cargado en cada filamento:
+    Lo pone KLIPPER, no el laminador: la tabla variable_pa del macro
+    START_PRINT en versions/<CURRENT>/macros.cfg.
       PLA 0.04   PETG 0.06   ABS 0.05   TPU 0.6
-    Ya están ACTIVADOS (enable_pressure_advance = 1).
-    Orca emite SET_PRESSURE_ADVANCE al inicio, sin tocar printer.cfg.
-    El test solo sirve para afinar el valor exacto de cada rollo.
+    Para afinarlo, corre el test y despues cambia el valor EN LOS DOS LADOS
+    (variable_pa y la clave pressure_advance del filamento en profiles.py).
+    orca.py check falla si quedan distintos.
+    Para experimentar sin tocar firmware: poner enable_pressure_advance en
+    ["1"] en ese filamento, y Orca lo pisa.
 
  4. INPUT SHAPER                                <- requiere tocar printer.cfg
     Con acelerómetro ADXL345: SHAPER_CALIBRATE, después SAVE_CONFIG.
@@ -594,8 +605,8 @@ Tres causas concretas, con su corrección:
 
 | Causa | Evidencia | Corrección |
 |---|---|---|
-| Klipper partía los arcos en cuerdas de 1 mm | `[gcode_arcs] resolution = 1.0` consultado por API. En un radio de 2 mm eso son 0.064 mm de faceta | `enable_arc_fitting` a **0**: Orca emite segmentos de 0.012 mm. G-code más grande, curvas suaves |
-| Pressure advance apagado | El g-code impreso tenía `enable_pressure_advance = 0` y Klipper reportaba `pressure_advance = 0.0` | Activado en los 4 filamentos. Orca emite `SET_PRESSURE_ADVANCE` y **no se toca `printer.cfg`** |
+| Klipper partía los arcos en cuerdas de 1 mm | `[gcode_arcs] resolution = 1.0` consultado por API. En un radio de 2 mm eso son 0.064 mm de faceta | Primero se apagó `enable_arc_fitting`. Desde `versions/v3` se arregla de raíz: `resolution: 0.1` en `limits.cfg` y el arc fitting vuelve a estar prendido |
+| Pressure advance apagado | El g-code impreso tenía `enable_pressure_advance = 0` y Klipper reportaba `pressure_advance = 0.0` | Lo pone `START_PRINT` según el `MATERIAL` que anuncia el laminador, así lo hereda cualquier g-code |
 | Techo de un agujero sin soporte | El perímetro en voladizo arrancaba en el aire | `overhang_reverse` y `extra_perimeters_on_overhangs` en 1 |
 
 Además, como sin input shaper la amplitud del ringing la manda la aceleración y
@@ -626,25 +637,35 @@ para comparar. La validación es imprimir.
 
 ## 11. Backup y restauración
 
-Todo vive en el repositorio git `~/3dprint`:
+Todo vive en el repositorio git `~/nd.printer`, que tiene las dos mitades:
 
 ```
- 3dprint/
+ nd.printer/
  |
- +-- orca.py                    CLI: where / build / install / verify / audit
+ +-- versions/                  LA MAQUINA
+ |   +-- CURRENT                que version esta viva
+ |   +-- v3/hardware.cfg        pines, sensores, PID, offsets
+ |   +-- v3/limits.cfg          [printer] [gcode_arcs] [idle_timeout]
+ |   +-- v3/macros.cfg          START_PRINT / END_PRINT
+ |   +-- v3/printer.cfg.example plantilla del archivo mutable
  |
- +-- src/
- |   +-- profiles.py            FUENTE DE VERDAD: los 9 perfiles
- |   +-- orcapaths.py           localizacion cross-platform del data dir
- |   +-- confpatch.py           parcheo de OrcaSlicer.conf con recalculo del MD5
- |   +-- flatten.py             resuelve la cadena de herencia
- |   +-- audit.py               auditoria de caudales y temperaturas
+ +-- orca/                      EL LAMINADOR
+ |   +-- orca.py                CLI: where build install verify audit check
+ |   +-- src/profiles.py        FUENTE DE VERDAD: los 9 perfiles
+ |   +-- src/orcapaths.py       localizacion cross-platform del data dir
+ |   +-- src/confpatch.py       parcheo de OrcaSlicer.conf con recalculo del MD5
+ |   +-- src/flatten.py         resuelve la cadena de herencia
+ |   +-- src/audit.py           auditoria de caudales y temperaturas
+ |   +-- src/klippercfg.py      parser de los .cfg de Klipper
+ |   +-- src/checkcfg.py        validacion cruzada entre las dos mitades
+ |   +-- presets/               snapshot versionado que consume OrcaSlicer
+ |   +-- docs/                  este documento y su version web
  |
- +-- presets/                   snapshot versionado que consume OrcaSlicer
- +-- docs/                      este documento y su version web
- +-- reference/klipper/         printer.cfg y macros.cfg de la maquina
  +-- backup/20260826-original/  la configuracion previa a este repo
 ```
+
+La mitad de Klipper la despliega a la Raspberry el rol `klipper_config` de
+nd.homelab; la de OrcaSlicer se instala en cada PC con `orca.py install`.
 
 `orca.py install` deja además un backup con timestamp en `backup/<fecha>/`
 antes de escribir nada.

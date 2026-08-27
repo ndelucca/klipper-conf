@@ -463,9 +463,11 @@ footer{
    max_z_accel         100 mm/s2
 
  [input_shaper]        NO CONFIGURADO
- pressure_advance      NO CONFIGURADO</pre></div>
+ pressure_advance      lo pone START_PRINT segun el material</pre></div>
 
-  <p><code>[exclude_object]</code> está presente y el perfil lo aprovecha. <code>[gcode_arcs]</code> también, pero con su <code>resolution</code> por defecto de <strong>1 mm</strong>, demasiado grueso para radios chicos: ver la sección 5.</p>
+  <p><code>[exclude_object]</code> está presente y el perfil lo aprovecha. <code>[gcode_arcs]</code> también, y desde <code>versions/v3</code> declara <code>resolution: 0.1</code>, que es lo que hace seguro el arc fitting. Con el default de 1 mm quedaban facetas visibles en los radios chicos.</p>
+
+  <p>Estas dependencias ya no se controlan a ojo: las valida <code>python orca/orca.py check</code> contra <code>versions/&lt;CURRENT&gt;/</code>, y CI las corre en cada push.</p>
 </section>
 
 <!-- ================= 3 ================= -->
@@ -516,7 +518,7 @@ footer{
   </ul>
 
   <h3>Repositorio</h3>
-  <p>Toda esta configuración vive versionada en <code>~/3dprint</code>, con dos capas sincronizadas:</p>
+  <p>Toda esta configuración vive versionada en <code>~/nd.printer</code>, con dos capas sincronizadas:</p>
   <div class="term"><pre> src/profiles.py            presets/                  OrcaSlicer
  ---------------            --------                  ----------
  definición en Python  --&gt;  snapshot JSON        --&gt;  instalación
@@ -569,8 +571,7 @@ footer{
 
   <h3>G-code</h3>
   <div class="term gcode"><pre>; machine_start_gcode
-START_PRINT BED_TEMP=[bed_temperature_initial_layer_single] EXTRUDER_TEMP=[nozzle_temperature_initial_layer]
-BED_MESH_PROFILE LOAD=default
+START_PRINT BED_TEMP=[bed_temperature_initial_layer_single] EXTRUDER_TEMP=[nozzle_temperature_initial_layer] MATERIAL=[filament_type]
 
 ; layer_change_gcode
 ;AFTER_LAYER_CHANGE
@@ -581,8 +582,9 @@ G92 E0
 END_PRINT</pre></div>
 
   <div class="note">
-    <span class="tag">BED_MESH_PROFILE LOAD=default</span>
-    <p>Es nuevo. Tu macro <code>START_PRINT</code> hace <code>G28</code>, que borra la malla activa, y después nunca la volvía a cargar. Tenías una malla 6×6 medida y guardada que no se usaba nunca. Si algún día borrás ese perfil de malla en Klipper, esta línea va a abortar la impresión.</p>
+    <span class="tag">MATERIAL=[filament_type]</span>
+    <p>Es lo que le permite a Klipper poner el pressure advance por su cuenta: el macro tiene la tabla por material (<code>variable_pa</code>) y el laminador solo anuncia cuál está cargado. Así cualquier g-code hereda el PA correcto aunque no lo haya generado OrcaSlicer.</p>
+    <p>La carga de la malla <strong>ya no está acá</strong>. Antes el start gcode hacía <code>BED_MESH_PROFILE LOAD=default</code>, porque <code>START_PRINT</code> hace <code>G28</code> y nunca volvía a cargarla. Eso ahora lo hace el propio macro, que es donde corresponde: la malla es de la máquina, no del laminador.</p>
   </div>
 
   <p><code>G92 E0</code> en el cambio de capa es obligatorio: el perfil usa extrusión relativa (<code>M83</code>, que tu macro ya setea) y sin ese reset se pierde precisión de punto flotante en el acumulador de E. OrcaSlicer directamente rechaza el perfil si falta.</p>
@@ -644,7 +646,7 @@ END_PRINT</pre></div>
       <tr><td><code>ensure_vertical_shell_thickness</code></td><td class="n">moderate</td><td>Evita agujeros en paredes casi verticales sin inflar el tiempo</td></tr>
       <tr><td><code>seam_position</code></td><td class="n">aligned</td><td>Costura alineada en una columna</td></tr>
       <tr><td><code>staggered_inner_seams</code></td><td class="n">sí</td><td>Escalona las costuras internas, no se apilan todas</td></tr>
-      <tr><td><code>enable_arc_fitting</code></td><td class="n">no</td><td>Klipper tiene <code>[gcode_arcs]</code>, pero su <code>resolution</code> por defecto es 1 mm y parte cada arco en cuerdas de 1 mm, lo que deja facetas en los radios chicos. Apagado, Orca emite segmentos de 0.012 mm y las curvas salen suaves</td></tr>
+      <tr><td><code>enable_arc_fitting</code></td><td class="n">sí</td><td>Depende de que <code>limits.cfg</code> declare <code>[gcode_arcs] resolution: 0.1</code>. Con el default de 1 mm el arco se parte en cuerdas de 1 mm y en un radio de 2 mm deja 0.064 mm de faceta; con 0.1 mm el error baja a 0.0006 mm y el g-code es mucho más chico que emitiendo segmentos de 0.012 mm</td></tr>
       <tr><td><code>exclude_object</code></td><td class="n">sí</td><td>Podés cancelar una pieza sola desde Mainsail sin abortar el plato</td></tr>
       <tr><td><code>elefant_foot_compensation</code></td><td class="n">0.15 mm</td><td>Compensa el aplastado de la primera capa</td></tr>
     </tbody>
@@ -773,11 +775,12 @@ END_PRINT</pre></div>
 
  3. PRESSURE ADVANCE                       &lt;- el de mayor impacto
     OrcaSlicer -&gt; Calibration -&gt; Pressure Advance (modo Tower)
-    Valor sugerido ya pre-cargado en cada filamento:
+    Lo pone KLIPPER, no el laminador: la tabla variable_pa del macro
+    START_PRINT en versions/&lt;CURRENT&gt;/macros.cfg.
       PLA 0.04   PETG 0.06   ABS 0.05   TPU 0.6
-    Están DESACTIVADOS (enable_pressure_advance = 0).
-    Para activar: Filament -&gt; Setting Overrides -&gt; "Enable pressure advance".
-    Orca emite SET_PRESSURE_ADVANCE al inicio, sin tocar printer.cfg.
+    Para afinarlo, corré el test y después cambiá el valor EN LOS DOS LADOS
+    (variable_pa y la clave pressure_advance del filamento en profiles.py).
+    orca.py check falla si quedan distintos.
 
  4. INPUT SHAPER                           &lt;- requiere tocar printer.cfg
     Con ADXL345: SHAPER_CALIBRATE y después SAVE_CONFIG.
@@ -857,8 +860,8 @@ END_PRINT</pre></div>
   <div class="tblwrap"><table>
     <thead><tr><th>Causa</th><th>Evidencia</th><th>Corrección</th></tr></thead>
     <tbody>
-      <tr><td>Klipper partía los arcos en cuerdas de 1 mm</td><td><code>[gcode_arcs] resolution = 1.0</code> consultado por API. En un radio de 2 mm son 0.064 mm de faceta</td><td><code>enable_arc_fitting</code> a <strong>0</strong>: Orca emite segmentos de 0.012 mm. G-code más grande, curvas suaves</td></tr>
-      <tr><td>Pressure advance apagado</td><td>El g-code impreso tenía <code>enable_pressure_advance = 0</code> y Klipper reportaba <code>pressure_advance = 0.0</code></td><td>Activado en los 4 filamentos. Orca emite <code>SET_PRESSURE_ADVANCE</code> y <strong>no se toca <code>printer.cfg</code></strong></td></tr>
+      <tr><td>Klipper partía los arcos en cuerdas de 1 mm</td><td><code>[gcode_arcs] resolution = 1.0</code> consultado por API. En un radio de 2 mm son 0.064 mm de faceta</td><td>Primero se apagó <code>enable_arc_fitting</code>. Desde <code>versions/v3</code> se arregla de raíz: <code>resolution: 0.1</code> en <code>limits.cfg</code> y el arc fitting vuelve a estar prendido</td></tr>
+      <tr><td>Pressure advance apagado</td><td>El g-code impreso tenía <code>enable_pressure_advance = 0</code> y Klipper reportaba <code>pressure_advance = 0.0</code></td><td>Lo pone <code>START_PRINT</code> según el <code>MATERIAL</code> que anuncia el laminador, así lo hereda cualquier g-code</td></tr>
       <tr><td>Techo de un agujero sin soporte</td><td>El perímetro en voladizo arrancaba en el aire</td><td><code>overhang_reverse</code> y <code>extra_perimeters_on_overhangs</code> en 1</td></tr>
     </tbody>
   </table></div>
@@ -880,22 +883,30 @@ END_PRINT</pre></div>
 <section id="s11">
   <h2><span class="num">11</span>Backup y restauración</h2>
   <div class="rule"></div>
-  <p>Todo vive en el repositorio git <code>~/3dprint</code>:</p>
-  <div class="term"><pre> 3dprint/
+  <p>Todo vive en el repositorio git <code>~/nd.printer</code>, que tiene las dos mitades:</p>
+  <div class="term"><pre> nd.printer/
  |
- +-- orca.py                    CLI: where / build / install / verify / audit
+ +-- versions/                  LA MAQUINA
+ |   +-- CURRENT                qué versión está viva
+ |   +-- v3/hardware.cfg        pines, sensores, PID, offsets
+ |   +-- v3/limits.cfg          [printer] [gcode_arcs] [idle_timeout]
+ |   +-- v3/macros.cfg          START_PRINT / END_PRINT
+ |   +-- v3/printer.cfg.example plantilla del archivo mutable
  |
- +-- src/
- |   +-- profiles.py            FUENTE DE VERDAD: los 9 perfiles
- |   +-- orcapaths.py           localización cross-platform del data dir
- |   +-- confpatch.py           parcheo de OrcaSlicer.conf con recálculo del MD5
- |   +-- flatten.py             resuelve la cadena de herencia
- |   +-- audit.py               auditoría de caudales y temperaturas
+ +-- orca/                      EL LAMINADOR
+ |   +-- orca.py                CLI: where build install verify audit check
+ |   +-- src/profiles.py        FUENTE DE VERDAD: los 9 perfiles
+ |   +-- src/orcapaths.py       localización cross-platform del data dir
+ |   +-- src/confpatch.py       parcheo de OrcaSlicer.conf con recálculo del MD5
+ |   +-- src/flatten.py         resuelve la cadena de herencia
+ |   +-- src/audit.py           auditoría de caudales y temperaturas
+ |   +-- src/klippercfg.py      parser de los .cfg de Klipper
+ |   +-- src/checkcfg.py        validación cruzada entre las dos mitades
+ |   +-- presets/               snapshot versionado que consume OrcaSlicer
+ |   +-- docs/                  este documento y su versión web
  |
- +-- presets/                   snapshot versionado que consume OrcaSlicer
- +-- docs/                      este documento y su versión web
- +-- reference/klipper/         printer.cfg y macros.cfg de la máquina
  +-- backup/20260826-original/  la configuración previa a este repo</pre></div>
+  <p>La mitad de Klipper la despliega a la Raspberry el rol <code>klipper_config</code> de nd.homelab; la de OrcaSlicer se instala en cada PC con <code>orca.py install</code>.</p>
   <p><code>orca.py install</code> deja además un backup con timestamp en <code>backup/&lt;fecha&gt;/</code> antes de escribir nada.</p>
   <p><strong>Para restaurar lo viejo</strong>: cerrá OrcaSlicer, borrá el <code>user/default/</code> del directorio de datos y copiá encima <code>backup/20260826-original/user/</code>, más el <code>OrcaSlicer.conf</code>.</p>
   <p><strong>Para reinstalar lo nuevo</strong>: cerrá OrcaSlicer y corré <code>python orca.py install</code>.</p>

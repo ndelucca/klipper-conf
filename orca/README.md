@@ -18,27 +18,28 @@ una impresora, cuatro procesos y cuatro filamentos.
 git clone <este-repo> 3dprint
 cd 3dprint
 
-python orca.py where      # confirma que encuentra tu OrcaSlicer
+python orca/orca.py where      # confirma que encuentra tu OrcaSlicer
 
 # opcional: la URL de tu impresora (ver "El host de impresión" mas abajo)
 echo "https://mi-impresora.example" > .printer-host
 
 # cerrar OrcaSlicer antes de instalar
-python orca.py install
-python orca.py verify     # confirma que quedó todo igual que en el repo
+python orca/orca.py install
+python orca/orca.py verify     # confirma que quedó todo igual que en el repo
 ```
 
 ## Comandos
 
 | Comando | Qué hace |
 |---|---|
-| `python orca.py where` | Muestra dónde detectó el directorio de datos de OrcaSlicer y si la app está abierta |
-| `python orca.py build` | Regenera `presets/` desde `src/profiles.py` |
-| `python orca.py build --check` | No escribe nada: falla si `presets/` quedó desactualizado. Útil antes de commitear |
-| `python orca.py install` | Hace backup de lo que haya, instala `presets/` y deja la selección apuntando a estos perfiles |
-| `python orca.py install --dry-run` | Muestra qué archivos tocaría, sin escribir |
-| `python orca.py verify` | Compara archivo por archivo lo instalado contra el repo |
-| `python orca.py audit` | Resuelve la herencia de lo instalado y audita caudales, velocidades y temperaturas reales |
+| `python orca/orca.py where` | Muestra dónde detectó el directorio de datos de OrcaSlicer y si la app está abierta |
+| `python orca/orca.py build` | Regenera `presets/` desde `src/profiles.py` |
+| `python orca/orca.py build --check` | No escribe nada: falla si `presets/` quedó desactualizado. Útil antes de commitear |
+| `python orca/orca.py install` | Hace backup de lo que haya, instala `presets/` y deja la selección apuntando a estos perfiles |
+| `python orca/orca.py install --dry-run` | Muestra qué archivos tocaría, sin escribir |
+| `python orca/orca.py verify` | Compara archivo por archivo lo instalado contra el repo |
+| `python orca/orca.py audit` | Resuelve la herencia de lo instalado y audita caudales, velocidades y temperaturas reales |
+| `python orca/orca.py check` | Valida los presets contra la configuración de Klipper de `../versions/<CURRENT>/`. Falla si las dos mitades del repo se desincronizan |
 
 Todos aceptan `--data-dir RUTA` si la autodetección falla, y respetan la
 variable de entorno `ORCA_DATA_DIR`.
@@ -71,9 +72,9 @@ pueden separar sin darse cuenta.
 ### Árbol
 
 ```
- 3dprint/
+ nd.printer/orca/
  |
- +-- orca.py                    CLI unico: where / build / install / verify / audit
+ +-- orca.py                    CLI: where / build / install / verify / audit / check
  |
  +-- src/
  |   +-- profiles.py            FUENTE DE VERDAD: los 9 perfiles y sus comentarios
@@ -92,12 +93,11 @@ pueden separar sin darse cuenta.
  |   +-- orcaslicer-ender3s1pro-klipper.md    el por que de cada valor
  |   +-- artifact.html                        la misma doc en formato web
  |
- +-- reference/
- |   +-- klipper/               printer.cfg y macros.cfg de la maquina
- |                              (snapshot de referencia, NO se gestiona desde aca)
- |
- +-- backup/                    (local, ignorado por git)
-     +-- <timestamp>/           lo que habia antes de cada install
+ +-- src/klippercfg.py         parser minimo de los .cfg de Klipper
+ +-- src/checkcfg.py           validacion cruzada contra versions/<CURRENT>
+
+ (la configuracion de Klipper vive en ../versions/, y ../backup/ guarda
+  lo que habia antes de cada install: los dos fuera de esta carpeta)
 ```
 
 ---
@@ -139,13 +139,13 @@ próximo `install` y el repo deja de reflejar la realidad.
 ```sh
 # 1. editar el valor en src/profiles.py
 # 2. regenerar el snapshot
-python orca.py build
+python orca/orca.py build
 
 # 3. ver el impacto real (resuelve la herencia y recalcula caudales)
-python orca.py audit
+python orca/orca.py audit
 
 # 4. instalar y commitear
-python orca.py install
+python orca/orca.py install
 git add -A && git commit -m "Bajar la aceleracion de pared exterior a 800"
 ```
 
@@ -196,23 +196,33 @@ cp backup/<timestamp>/OrcaSlicer.conf "<data>/OrcaSlicer.conf"
 
 ## Dependencias sobre la máquina
 
-Los perfiles heredan de presets de fábrica de OrcaSlicer y asumen dos cosas del
-`printer.cfg`. Si los cambiás, hay que revisar el perfil:
+Estas dependencias **ya no se controlan a ojo**: las valida
+`python orca/orca.py check` contra `../versions/<CURRENT>/`, y CI las corre en
+cada push.
 
 | Depende de | Dónde impacta |
 |---|---|
 | `[printer] max_accel` = 2000 | Todas las aceleraciones de los procesos están calibradas contra ese techo |
-| Una malla de cama guardada con el nombre `default` | El start gcode hace `BED_MESH_PROFILE LOAD=default`. Si el perfil no existe, la impresión aborta |
-| Las macros `START_PRINT` y `END_PRINT` | Son las que llama el start y end gcode |
-| `[exclude_object]` y `[gcode_arcs]` | Los procesos activan `exclude_object` y `enable_arc_fitting` |
+| `[printer]` max_velocity, max_z_velocity, square_corner_velocity | Espejados en los machine limits del perfil de impresora |
+| Geometría de los steppers y del extruder | `printable_area`, `printable_height`, `nozzle_diameter` |
+| `[gcode_arcs] resolution` <= 0.2 | Sin eso, `enable_arc_fitting` factea las curvas |
+| `[exclude_object]` | Los procesos activan `exclude_object` |
+| Las macros `START_PRINT` y `END_PRINT` | Son las que llama el start y end gcode, con sus parámetros |
+| `variable_pa` en `START_PRINT` | Es quien pone el pressure advance; los valores de cada filamento tienen que coincidir |
+| `max_temp` del hotend y de la cama | Techo de las temperaturas de cada filamento |
 
-El `printer.cfg` de referencia está en `reference/klipper/`. Es un snapshot para
-entender de dónde salen los valores, no se instala ni se sincroniza.
+Si alguna deja de cumplirse, `check` falla diciendo exactamente cuál y con qué
+valores de cada lado.
 
 ---
 
 ## Pendiente
 
-`printer.cfg` no tiene `[input_shaper]` ni `pressure_advance`. El perfil está
-calibrado contra ese límite a propósito. La sección 8 de la documentación lista
-el orden de calibración y exactamente qué valores subir después.
+`[input_shaper]` sigue sin calibrar, y el perfil está calibrado contra ese límite
+a propósito: mientras no exista, `max_accel` se queda en 2000 y `check` falla si
+alguien lo sube. La sección 8 de la documentación lista el orden de calibración y
+exactamente qué valores subir después.
+
+El pressure advance ya lo pone Klipper (tabla `variable_pa` en `macros.cfg`), pero
+con valores conservadores. El óptimo de cada rollo sale de Calibration ->
+Pressure Advance.
