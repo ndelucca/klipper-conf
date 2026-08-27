@@ -155,7 +155,7 @@
         "300x300"
     ],
     "thumbnails_format": "PNG",
-    "machine_start_gcode": "START_PRINT BED_TEMP=[bed_temperature_initial_layer_single] EXTRUDER_TEMP=[nozzle_temperature_initial_layer]\nBED_MESH_PROFILE LOAD=default\n",
+    "machine_start_gcode": "START_PRINT BED_TEMP=[bed_temperature_initial_layer_single] EXTRUDER_TEMP=[nozzle_temperature_initial_layer] MATERIAL=[filament_type]\n",
     "machine_end_gcode": "END_PRINT\n",
     "before_layer_change_gcode": ";BEFORE_LAYER_CHANGE\n;[layer_z]\n",
     "layer_change_gcode": ";AFTER_LAYER_CHANGE\n;[layer_z]\nG92 E0\n",

@@ -54,12 +54,19 @@ BASE_IDS = {
 # ============================================================================
 # IMPRESORA
 # ============================================================================
-# BED_MESH_PROFILE LOAD=default es necesario porque START_PRINT hace G28, que
-# borra la malla activa, y la macro nunca la vuelve a cargar. Sin esta línea la
-# malla 6x6 guardada en printer.cfg no se usa en ninguna impresión.
+# Contrato con el macro START_PRINT de versions/<CURRENT>/macros.cfg.
+# `orca.py check` valida que los parámetros que se pasan acá sean exactamente
+# los que la macro lee de params.
+#
+# MATERIAL es lo que hace que Klipper pueda poner el pressure advance por su
+# cuenta: la macro tiene la tabla por material y el laminador solo anuncia cuál
+# está cargado. Así cualquier gcode hereda el PA correcto, venga de donde venga.
+#
+# La carga de la malla ya NO está acá: la hace START_PRINT, porque la malla es
+# de la máquina y no del laminador.
 START = ("START_PRINT BED_TEMP=[bed_temperature_initial_layer_single] "
-         "EXTRUDER_TEMP=[nozzle_temperature_initial_layer]\n"
-         "BED_MESH_PROFILE LOAD=default\n")
+         "EXTRUDER_TEMP=[nozzle_temperature_initial_layer] "
+         "MATERIAL=[filament_type]\n")
 
 MACHINE = {
     "type": "machine",
@@ -274,16 +281,15 @@ COMMON = {
     "support_remove_small_overhang": "1",
 
     # Salida.
-    # arc_fitting DESACTIVADO a proposito. Klipper tiene [gcode_arcs], pero su
-    # `resolution` por defecto es 1.0 mm: recibe el G2/G3 y lo parte en cuerdas
-    # de 1 mm. En un borde de radio chico eso deja facetas visibles
-    # (radio 2 mm -> 0.064 mm de error; radio 5 mm -> 0.025 mm).
-    # Con el arc fitting apagado, Orca emite segmentos segun `resolution`
-    # (0.012 mm) y las curvas salen suaves. Cuesta un gcode mas grande.
-    # Alternativa, si se prefiere archivos chicos: dejarlo en "1" y agregar
-    # `resolution: 0.1` a la seccion [gcode_arcs] de printer.cfg.
+    # arc_fitting ACTIVADO. Depende de que [gcode_arcs] en limits.cfg declare
+    # `resolution: 0.1`. Con el default de Klipper (1.0 mm) el arco llega entero
+    # pero se parte en cuerdas de 1 mm, lo que en un radio de 2 mm deja 0.064 mm
+    # de facetado visible; con 0.1 mm el error baja a 0.0006 mm y ademas el
+    # gcode es mucho mas chico que emitiendo segmentos de 0.012 mm.
+    # `orca.py check` valida ese par: si alguien sube la resolution de Klipper
+    # por encima de 0.2, falla y hay que volver a poner esto en "0".
     "resolution": "0.012",
-    "enable_arc_fitting": "0",
+    "enable_arc_fitting": "1",
     "exclude_object": "1",
     "gcode_label_objects": "1",
     "enable_prime_tower": "0",
@@ -489,12 +495,21 @@ def _fil(name, inherits, ftype, extra):
         "slow_down_for_layer_cooling": ["1"],
         "reduce_fan_stop_start_freq": ["1"],
         "enable_overhang_bridge_fan": ["1"],
-        # Orca emite SET_PRESSURE_ADVANCE ADVANCE=<valor> al inicio de la
-        # impresion. Es 100% del lado del laminador: no se edita printer.cfg,
-        # no hay SAVE_CONFIG, y al reiniciar Klipper vuelve a 0.
-        # Los valores por material son conservadores y tipicos de un direct
-        # drive; el optimo real sale de Calibration -> Pressure Advance.
-        "enable_pressure_advance": ["1"],
+        # El pressure advance lo pone KLIPPER, no el laminador: la macro
+        # START_PRINT tiene la tabla por material (variable_pa en
+        # versions/<CURRENT>/macros.cfg) y recibe MATERIAL=[filament_type].
+        # Asi cualquier gcode hereda el PA correcto aunque no lo haya generado
+        # OrcaSlicer.
+        #
+        # La clave `pressure_advance` de cada filamento sigue definida mas
+        # abajo a proposito: es la fuente de verdad que `orca.py check` cruza
+        # contra variable_pa para que no se desincronicen.
+        #
+        # Poner esto en ["1"] en un filamento es un override deliberado: Orca
+        # emite su SET_PRESSURE_ADVANCE despues del macro y por lo tanto gana.
+        # Sirve para experimentar con Calibration -> Pressure Advance sin tocar
+        # el firmware. check lo reporta como aviso, no como error.
+        "enable_pressure_advance": ["0"],
     }
     d.update(extra)
     return d
