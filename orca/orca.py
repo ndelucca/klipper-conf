@@ -2,11 +2,11 @@
 # -*- coding: utf-8 -*-
 """Configuración de OrcaSlicer para Ender 3 S1 Pro + Klipper.
 
-    python orca.py where      dónde está el directorio de datos de OrcaSlicer
-    python orca.py build      regenera presets/ desde src/profiles.py
-    python orca.py install    instala presets/ en OrcaSlicer (con backup)
-    python orca.py verify     compara lo instalado contra presets/
-    python orca.py audit      audita caudales y herencia de lo instalado
+    python orca/orca.py where    dónde está el directorio de datos de OrcaSlicer
+    python orca/orca.py build    regenera presets/ desde src/profiles.py
+    python orca/orca.py install  instala presets/ en OrcaSlicer (con backup)
+    python orca/orca.py verify   compara lo instalado contra presets/
+    python orca/orca.py audit    audita caudales y herencia de lo instalado
 
 Sin dependencias externas: solo la librería estándar de Python 3.8+.
 Funciona en Windows, macOS y Linux.
@@ -18,15 +18,18 @@ import shutil
 import sys
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parent
-sys.path.insert(0, str(REPO / "src"))
+# HERE es esta carpeta (la mitad "slicer" del repo); REPO es la raiz, donde
+# convive con versions/ (la mitad "Klipper") y donde vive .printer-host.
+HERE = Path(__file__).resolve().parent
+REPO = HERE.parent
+sys.path.insert(0, str(HERE / "src"))
 
 import confpatch          # noqa: E402
 import localhost_         # noqa: E402
 import orcapaths          # noqa: E402
 import profiles           # noqa: E402
 
-PRESETS = REPO / "presets"
+PRESETS = HERE / "presets"
 KINDS = ("machine", "process", "filament")
 
 
