@@ -1,0 +1,27 @@
+# printer.cfg - el UNICO archivo que Klipper puede escribir y el UNICO que no se
+# versiona.
+#
+# Es dueño del bloque SAVE_CONFIG del final, donde Klipper persiste lo que
+# calibra solo: la malla de cama (BED_MESH_CALIBRATE), el z_offset del probe
+# (PROBE_CALIBRATE) y los PID (PID_CALIBRATE). Ese bloque gana sobre cualquier
+# valor de los includes porque viene despues.
+#
+# Todo lo demas vive en los includes, que el rol klipper_config de nd.homelab
+# despliega desde este repo en modo 0444.
+#
+# El deploy crea este archivo una sola vez (force: false) y despues nunca lo
+# vuelve a tocar. Si hace falta rehacerlo, el backup queda en
+# printer.cfg.premigracion.
+
+[include hardware.cfg]
+[include limits.cfg]
+
+# mainsail.cfg NO esta en este repo a proposito: es un symlink a
+# ~/mainsail-config/mainsail.cfg, el checkout upstream que mantiene el
+# [update_manager mainsail-config] de Moonraker. Versionar una copia solo
+# garantiza que derive sin que nadie se entere.
+[include mainsail.cfg]
+
+# [include timelapse.cfg]
+
+[include macros.cfg]
