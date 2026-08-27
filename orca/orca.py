@@ -7,6 +7,11 @@
     python orca/orca.py install  instala presets/ en OrcaSlicer (con backup)
     python orca/orca.py verify   compara lo instalado contra presets/
     python orca/orca.py audit    audita caudales y herencia de lo instalado
+    python orca/orca.py check    valida los presets contra versions/<CURRENT>
+
+`build --check` y `check` son cosas distintas: el primero detecta que presets/
+quedó desactualizado respecto de profiles.py, el segundo que los presets dejaron
+de ser coherentes con la configuración de Klipper de la impresora.
 
 Sin dependencias externas: solo la librería estándar de Python 3.8+.
 Funciona en Windows, macOS y Linux.
@@ -329,6 +334,33 @@ def cmd_audit(args):
 
 
 # ---------------------------------------------------------------------------
+# check
+# ---------------------------------------------------------------------------
+def klipper_dir(args):
+    """Directorio de configuracion de Klipper contra el que validar.
+
+    Por defecto, la version que declara versions/CURRENT, que es la unica fuente
+    de verdad de cual esta viva. El rol klipper_config de nd.homelab lee el mismo
+    archivo.
+    """
+    if getattr(args, "klipper_dir", None):
+        return Path(args.klipper_dir)
+    marca = REPO / "versions" / "CURRENT"
+    if not marca.is_file():
+        raise SystemExit("No existe %s. Usa --klipper-dir." % marca)
+    ver = marca.read_text(encoding="utf-8").strip()
+    d = REPO / "versions" / ver
+    if not d.is_dir():
+        raise SystemExit("versions/CURRENT dice '%s' pero %s no existe." % (ver, d))
+    return d
+
+
+def cmd_check(args):
+    import checkcfg
+    return checkcfg.run(klipper_dir(args))
+
+
+# ---------------------------------------------------------------------------
 def main(argv=None):
     # --data-dir se acepta antes o despues del subcomando. SUPPRESS evita que
     # la version del subparser pise a la del parser principal cuando no se pasa.
@@ -363,13 +395,19 @@ def main(argv=None):
     sub.add_parser("audit", parents=[common],
                    help="audita caudales y herencia")
 
+    c = sub.add_parser("check", parents=[common],
+                       help="valida los presets contra la config de Klipper")
+    c.add_argument("--klipper-dir", metavar="RUTA", default=None,
+                   help="default: versions/<CURRENT>")
+
     args = ap.parse_args(argv)
     if not args.cmd:
         ap.print_help()
         return 0
     args.data_dir = getattr(args, "data_dir", None)
     return {"where": cmd_where, "build": cmd_build, "install": cmd_install,
-            "verify": cmd_verify, "audit": cmd_audit}[args.cmd](args)
+            "verify": cmd_verify, "audit": cmd_audit,
+            "check": cmd_check}[args.cmd](args)
 
 
 if __name__ == "__main__":

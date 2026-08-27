@@ -1,0 +1,26 @@
+---
+name: check
+
+# Las dos mitades del repo estan acopladas. Esto falla apenas dejan de coincidir,
+# que es la unica forma de que el acoplamiento no se rompa en silencio.
+on:
+  push:
+  pull_request:
+
+jobs:
+  coherencia:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      # presets/ es un snapshot generado: tiene que estar al dia con profiles.py.
+      - name: presets al dia con profiles.py
+        run: python orca/orca.py build --check
+
+      # Los presets tienen que ser coherentes con versions/<CURRENT>.
+      - name: presets coherentes con la config de Klipper
+        run: python orca/orca.py check
