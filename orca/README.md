@@ -3,8 +3,8 @@
 Configuración reproducible de OrcaSlicer para una **Ender 3 S1 Pro** con
 **Klipper** sobre Raspberry Pi 3B+, nozzle 0.4 y filamentos **Printalot**.
 
-Clonás el repo, corrés un comando, y tenés exactamente los mismos 9 perfiles:
-una impresora, cuatro procesos y cuatro filamentos.
+Clonás el repo, corrés un comando, y tenés exactamente los mismos 10 perfiles:
+una impresora, cinco procesos y cuatro filamentos.
 
 - Documentación completa del *por qué* de cada valor: [`docs/orcaslicer-ender3s1pro-klipper.md`](docs/orcaslicer-ender3s1pro-klipper.md)
 - Sin dependencias: solo la librería estándar de Python 3.14
@@ -90,7 +90,7 @@ pueden separar sin darse cuenta.
  +-- orca.py                    CLI: where / build / install / verify / audit / check
  |
  +-- orcakit/                   el toolkit
- |   +-- profiles.py            FUENTE DE VERDAD: los 9 perfiles y sus comentarios
+ |   +-- profiles.py            FUENTE DE VERDAD: los 10 perfiles y sus comentarios
  |   +-- presets.py             la forma de un preset: las dataclasses, sin valores
  |   +-- snapshot.py            construccion y comparacion de presets/
  |   +-- values.py              los valores de texto de Orca y Klipper, a numeros
@@ -107,7 +107,7 @@ pueden separar sin darse cuenta.
  |
  +-- presets/                   SNAPSHOT versionado que consume OrcaSlicer
  |   +-- machine/               EnderS1ProKlipper
- |   +-- process/               Fine / Standard / Strong / Draft
+ |   +-- process/               Fine / Standard / Strong / Draft / ABS
  |   +-- filament/              Printalot PLA / PETG / ABS / TPU Flex
  |
  +-- docs/
@@ -220,8 +220,9 @@ cada push.
 
 | Depende de | Dónde impacta |
 |---|---|
-| `[printer] max_accel` = 2000 | Todas las aceleraciones de los procesos están calibradas contra ese techo |
-| `[printer]` max_velocity, max_z_velocity, max_z_accel, square_corner_velocity | Espejados en los machine limits del perfil de impresora, y `max_z_velocity` además en el `travel_speed_z` de los 4 procesos |
+| `[printer] max_accel` = 3000 | Techo **mecánico**. Ninguna aceleración de ningún proceso puede pasarlo, travel incluido |
+| Techo de **ringing** = 2000 | Otra cosa, y la distinción importa: es lo que tolera la superficie que se ve, y solo aplica a las aceleraciones de *impresión*. El travel usa el techo mecánico entero porque el ringing de un desplazamiento por el aire no deja marca. `check` valida las dos reglas por separado |
+| `[printer]` max_velocity, max_z_velocity, max_z_accel, square_corner_velocity | Espejados en los machine limits del perfil de impresora, y `max_z_velocity` además en el `travel_speed_z` de los procesos |
 | Geometría de los steppers y del extruder | `printable_height`, `nozzle_diameter`. `printable_area` es el área útil de la **chapa** y solo tiene que *entrar* en el `position_max` del carro, que llega más lejos que el plato |
 | `[bed_mesh]` mesh_min / mesh_max | Fuera de ese rectángulo el Z está extrapolado. `check` avisa cuánta área imprimible queda sin dato medido |
 | `[gcode_arcs] resolution` <= 0.2 | Sin eso, `enable_arc_fitting` factea las curvas |
@@ -238,15 +239,27 @@ valores de cada lado.
 ## Pendiente
 
 `[input_shaper]` sigue sin calibrar, y el perfil está calibrado contra ese límite
-a propósito: mientras no exista, `max_accel` se queda en 2000 y `check` falla si
-alguien lo sube. La sección 8 de la documentación lista el orden de calibración y
-exactamente qué valores subir después.
+a propósito: mientras no exista, las aceleraciones de **impresión** se quedan en
+el techo de ringing de 2000 y `check` falla si alguna lo pasa. La sección 8 de la
+documentación lista el orden de calibración y exactamente qué valores subir
+después.
+
+Antes de eso, y sin comprar nada: la **torre de ringing** (Calibration -> Input
+Shaper) da la frecuencia de resonancia de cada eje en 20 minutos. Los 700 mm/s²
+de la pared exterior y los 2000 del resto son hoy una intuición, no una
+medición, y la amplitud residual va como `a / (2*pi*f)^2`: sin conocer `f` no se
+sabe si están de más o de menos. Es el paso A4 de la sección 8.
 
 El pressure advance ya lo pone Klipper (tabla `variable_pa` en `macros.cfg`), pero
 con valores conservadores. El óptimo de cada rollo sale de Calibration ->
 Pressure Advance.
 
 Y antes que los dos: **el techo de caudal del PLA no está medido**. Son 10 mm³/s
-estimados conservadores. Todo el mecanismo por el que 4 procesos alcanzan para 4
-materiales depende de que ese número sea real, así que Calibration -> Max
-Flowrate es el primer paso de la lista.
+estimados conservadores. Todo el mecanismo por el que un puñado de procesos
+alcanza para 4 materiales depende de que ese número sea real, así que
+Calibration -> Max Flowrate es el primer paso de la fase de material.
+
+Del lado de la máquina hay dos pasos previos que no cuestan un peso y que
+condicionan todo lo demás: nivelar con `SCREWS_TILT_CALCULATE` (que mide, en vez
+del método del papel) y recalibrar la malla **con la cama caliente**. Son A1 y A2
+de la sección 8.

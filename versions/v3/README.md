@@ -14,7 +14,7 @@ Klipper escribe solo.
    [include ...]      cuatro lineas
    #*# SAVE_CONFIG    la malla de cama, el z_offset del probe, los PID
 
- hardware.cfg         pines, sensores, PID, offsets, geometria, buzzer
+ hardware.cfg         pines, sensores, PID, offsets, geometria, nivelacion, buzzer
  limits.cfg           [printer] [gcode_arcs] [exclude_object] [idle_timeout]
  macros.cfg           START_PRINT / END_PRINT / M0 / m300
 ```
@@ -39,6 +39,22 @@ La copia que había en v1 y v2 nunca se usó.
 
 Todo lo demás (los 15 bloques de hardware, y los macros `M0`, `m300` y `END_PRINT`)
 se migró byte a byte desde v2, verificado clave por clave.
+
+## Cambios posteriores, dentro de v3
+
+| Qué | Antes | Ahora | Por qué |
+|---|---|---|---|
+| `[printer] max_accel` | `2000` | `3000` | Estaba haciendo dos trabajos incompatibles: el techo **mecánico** de la máquina y el presupuesto de **ringing** de la superficie. Atados, el travel pagaba una restricción de calidad que no le corresponde: el ringing de un desplazamiento por el aire no deja marca. A 2000, llegar a los 250 mm/s de travel exigía 15.6 mm y casi ningún travel real es tan largo. Ninguna aceleración de impresión se movió: solo subió `travel_acceleration` |
+| `M0` | `G1 E-5` sin reponer | sin retracción propia | El comentario decía "la repone el RESUME" y era falso. `RESUME` repone la retracción que hizo `PAUSE` (1 mm, de `mainsail.cfg`), no una que se le sumó después; y `RESTORE_GCODE_STATE` con `MOVE=0` reescribe la posición lógica de E sin mover el motor. El filamento quedaba 5 mm atrás y los primeros milímetros al reanudar salían huecos |
+| `START_PRINT` | sin resetear overrides | `M220 S100` / `M221 S100` | Los factores de velocidad y flujo de Mainsail sobreviven entre impresiones. Tocás el slider al 130 % para salvar una pieza y la siguiente sale al 130 % sin que nada lo diga |
+| `START_PRINT` subida a Z50 | `F240` (4 mm/s) | `F600` (10 mm/s) | Quedó del `max_z_velocity` viejo de 5. Son 40 mm: 10 s contra 4 s |
+| `[bltouch]` | 1 lectura por punto | `samples: 2`, mediana, tolerancia 0.0125 con 3 reintentos | La primera capa de todas las impresiones descansaba sobre un único disparo del probe. No cuesta tiempo de impresión: la malla se guarda y se carga, no se re-palpa |
+| `[bed_mesh] probe_count` | `6,6` (paso 39x44 mm) | `9,9` (paso 24x28 mm) | Con 6 puntos por eje la bicúbica inventaba el medio de cada celda, y una chapa de Ender 3 se deforma con longitud de onda menor que eso. Gratis, por el mismo motivo |
+| Nivelación | `[bed_screws]` (papel) | `+ [screws_tilt_adjust]` | Había un probe y se nivelaba a mano. `SCREWS_TILT_CALCULATE` dice cuánto girar cada perilla, en minutos de reloj. La malla corrige el residuo de una cama nivelada; no la reemplaza, porque `fade_end: 10` la desvanece a partir de Z=10 |
+
+Los cuatro tornillos son alcanzables por el probe: el caso apretado es el
+derecho en X=195, que exige el nozzle en 195+48 = 243 contra un `position_max`
+de 250. Entra, pero sin margen.
 
 ## Firmware del MCU
 

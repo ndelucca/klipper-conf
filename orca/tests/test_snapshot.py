@@ -4,7 +4,7 @@ mismo. Antes estaba escrito tres veces a mano, una por comando del CLI."""
 import json
 import unittest
 
-from orcakit import snapshot
+from orcakit import profiles, snapshot
 from tests.fixtures import TempDirCase
 
 
@@ -51,9 +51,10 @@ class TestBuildYRead(TempDirCase):
 
     def test_el_snapshot_son_dos_archivos_por_perfil(self):
         tree = snapshot.build()
-        self.assertEqual(len(tree), 18)
-        self.assertEqual(sum(1 for k in tree if k.endswith(".json")), 9)
-        self.assertEqual(sum(1 for k in tree if k.endswith(".info")), 9)
+        n = len(profiles.all_presets())
+        self.assertEqual(len(tree), 2 * n)
+        self.assertEqual(sum(1 for k in tree if k.endswith(".json")), n)
+        self.assertEqual(sum(1 for k in tree if k.endswith(".info")), n)
 
     def test_el_json_es_canonico(self):
         text = snapshot.preset_json({"b": "2", "a": "1"})

@@ -93,7 +93,10 @@ MACHINE = Machine(
     # x_offset -48 del BLTouch), asi que de X=200 a 220 el Z esta extrapolado.
     printable_area=("0x0", "220x0", "220x220", "0x220"),
     printable_height="270",
-    bed_exclude_area=("0x0",),
+    # Vacio, no ("0x0",). Estuvo con un poligono de UN punto, que no excluye
+    # nada pero tampoco significa nada: es un valor que aparenta declarar una
+    # zona prohibida y no declara ninguna.
+    bed_exclude_area=(),
     max_layer_height=("0.32",),
     min_layer_height=("0.08",),
 
@@ -105,18 +108,22 @@ MACHINE = Machine(
     scan_first_layer="0",
     auxiliary_fan="0",
 
-    # Limites espejados de printer.cfg (solo estimacion de tiempo)
+    # Limites espejados de printer.cfg (solo estimacion de tiempo).
+    # Las aceleraciones son el TECHO MECANICO de la maquina ([printer]
+    # max_accel = 3000), no el presupuesto de ringing: ese vive en las
+    # aceleraciones por feature de cada proceso, mas abajo. check compara
+    # estas contra max_accel, y aquellas contra el techo de ringing.
     machine_max_speed_x=("300", "300"),
     machine_max_speed_y=("300", "300"),
     machine_max_speed_z=("10", "10"),
     machine_max_speed_e=("50", "50"),
-    machine_max_acceleration_x=("2000", "2000"),
-    machine_max_acceleration_y=("2000", "2000"),
+    machine_max_acceleration_x=("3000", "3000"),
+    machine_max_acceleration_y=("3000", "3000"),
     machine_max_acceleration_z=("200", "200"),
-    machine_max_acceleration_e=("2000", "2000"),
-    machine_max_acceleration_extruding=("2000", "2000"),
-    machine_max_acceleration_retracting=("2000", "2000"),
-    machine_max_acceleration_travel=("2000", "2000"),
+    machine_max_acceleration_e=("3000", "3000"),
+    machine_max_acceleration_extruding=("3000", "3000"),
+    machine_max_acceleration_retracting=("3000", "3000"),
+    machine_max_acceleration_travel=("3000", "3000"),
     machine_max_jerk_x=("5", "5"),
     machine_max_jerk_y=("5", "5"),
     machine_max_jerk_z=("0.4", "0.4"),
@@ -129,7 +136,11 @@ MACHINE = Machine(
     retract_length_toolchange=("1",),
     retraction_speed=("35",),
     deretraction_speed=("30",),
-    retraction_minimum_travel=("1",),
+    # 2 mm y no 1. Con 1 mm el Sprite retraia en practicamente cada travel:
+    # cada par retraccion/reposicion mete un transitorio de presion, y aunque
+    # wipe=1 y reduce_infill_retraction=1 lo tapan casi siempre, son cientos
+    # de oportunidades por capa de que no lo tapen.
+    retraction_minimum_travel=("2",),
     retract_before_wipe=("0%",),
     retract_restart_extra=("0",),
     retract_restart_extra_toolchange=("0",),
@@ -192,7 +203,12 @@ COMMON = Process(
     top_surface_acceleration="700",
     bridge_acceleration="50%",
     initial_layer_acceleration="500",
-    travel_acceleration="2000",
+    # 3000: el techo de [printer] max_accel, no el de ringing. Un
+    # desplazamiento por el aire no toca la pieza, asi que no tiene por que
+    # pagar el presupuesto de calidad superficial. Con 2000 llegar a los 250
+    # de travel_speed exigia 15.6 mm y casi ningun travel real es tan largo;
+    # con 3000 son 10.4 mm. Ver el comentario de max_accel en limits.cfg.
+    travel_acceleration="3000",
     initial_layer_travel_acceleration=("1000",),
     # 0 = Orca no toca el square corner velocity, lo maneja Klipper (default 5)
     default_jerk="0",
@@ -242,6 +258,11 @@ COMMON = Process(
     internal_solid_infill_pattern="monotonicline",
     top_surface_pattern="monotonicline",
     bottom_surface_pattern="monotonic",
+
+    # Planchado apagado ACA a proposito, igual que el scarf joint: se prende
+    # por proceso. Solo vale la pena donde la cara superior se mira; en Draft
+    # y en Strong es tiempo gastado en una superficie que a nadie le importa.
+    ironing_type="no ironing",
 
     # Patron del relleno disperso. El argumento habitual a favor de gyroid es
     # la isotropia, y al 10-15% de densidad eso importa poco. Lo que importa
@@ -383,6 +404,25 @@ FINE = replace(
     bottom_shell_thickness="0.6",
     sparse_infill_density="15%",
     reduce_crossing_wall="1",
+    # Planchado de la cara superior. Es la mitad que faltaba: monotonicline
+    # ordena las pasadas y only_one_wall_top saca la costura del medio, pero
+    # entre linea y linea sigue quedando el valle del propio cordon. El
+    # planchado lo rellena pasando el nozzle casi vacio por encima.
+    #
+    # `top` y no `topmost`: plancha toda cara superior expuesta, no solo la
+    # ultima capa del objeto. `all solid` tambien plancharia las solidas
+    # internas, que nadie ve, y es tiempo tirado.
+    #
+    # flow 10% es material apenas suficiente para llenar los valles sin
+    # acumular; spacing 0.15 es solape agresivo a proposito (el objetivo es
+    # fundir, no depositar); speed 30 porque el planchado es sensible a la
+    # inercia y va sobre la superficie que menos perdona.
+    #
+    # Cuesta tiempo SOLO en caras superiores: no toca el resto de la pieza.
+    ironing_type="top",
+    ironing_flow="10%",
+    ironing_speed="30",
+    ironing_spacing="0.15",
     # Scarf joint. `conditional` hace que se aplique solo donde la pared es lo
     # bastante lisa (angulo > 155 grados): en una esquina viva el scarf se ve
     # peor que la costura normal, asi que ahi se abstiene.
@@ -442,6 +482,25 @@ STANDARD = replace(
     bottom_shell_layers="3",
     bottom_shell_thickness="0.6",
     sparse_infill_density="15%",
+    # Planchado de la cara superior. Es la mitad que faltaba: monotonicline
+    # ordena las pasadas y only_one_wall_top saca la costura del medio, pero
+    # entre linea y linea sigue quedando el valle del propio cordon. El
+    # planchado lo rellena pasando el nozzle casi vacio por encima.
+    #
+    # `top` y no `topmost`: plancha toda cara superior expuesta, no solo la
+    # ultima capa del objeto. `all solid` tambien plancharia las solidas
+    # internas, que nadie ve, y es tiempo tirado.
+    #
+    # flow 10% es material apenas suficiente para llenar los valles sin
+    # acumular; spacing 0.15 es solape agresivo a proposito (el objetivo es
+    # fundir, no depositar); speed 30 porque el planchado es sensible a la
+    # inercia y va sobre la superficie que menos perdona.
+    #
+    # Cuesta tiempo SOLO en caras superiores: no toca el resto de la pieza.
+    ironing_type="top",
+    ironing_flow="10%",
+    ironing_speed="30",
+    ironing_spacing="0.15",
     # Scarf joint. `conditional` hace que se aplique solo donde la pared es lo
     # bastante lisa (angulo > 155 grados): en una esquina viva el scarf se ve
     # peor que la costura normal, asi que ahi se abstiene.
@@ -553,7 +612,39 @@ DRAFT = replace(
 )
 
 
-PROCESSES = [FINE, STANDARD, STRONG, DRAFT]
+# 0.20mm ABS: el mismo Standard, con lo que el ABS necesita para sobrevivir a
+# una impresora SIN ENCERRAMIENTO.
+#
+# Existe porque habia una grieta en la arquitectura de este repo. Las notas del
+# filamento ABS decian "Obligatorio en el proceso: Brim outer_only 8mm" y
+# "Recomendado: Draft shield" -- pero brim_type y draft_shield son claves de
+# PROCESO, y en OrcaSlicer un filamento no puede pisar una clave de proceso.
+# O sea que la fuente de verdad documentaba un paso manual en la UI, sin
+# verificacion, para el unico material donde los defaults del proceso estan
+# realmente mal. Con esto vuelve a estar todo del lado que `check` mira.
+#
+# LO QUE NO SE TOCA, Y POR QUE: la velocidad y la aceleracion. Suena razonable
+# imprimir ABS mas lento "para que no warpee", y es al reves. Sin caja, el modo
+# de falla dominante es la delaminacion: la capa de abajo se enfria de mas
+# antes de que llegue la de arriba. Ir mas lento le da MAS tiempo para
+# enfriarse, no menos. Es el mismo razonamiento por el que el filamento va a
+# 255 y no a 245. Bajar la aceleracion solo ayudaria si la pieza se despegara
+# de la cama por inercia, y para eso esta el brim.
+ABS_PROC = replace(
+    STANDARD,
+    name="0.20mm ABS " + SUF,
+    # outer_only y no auto_brim: en ABS el brim no es una ayuda de adherencia
+    # marginal, es lo que sostiene las esquinas contra el warp. Solo por fuera
+    # porque un brim interno no aporta nada ahi y complica despegar la pieza.
+    brim_type="outer_only",
+    brim_width="8",
+    # La pared de sacrificio que rodea la pieza. No calienta el aire, pero
+    # corta la corriente: sin encerramiento, la mayor parte del gradiente que
+    # delamina viene de aire moviendose, no de temperatura ambiente baja.
+    draft_shield="enabled",
+)
+
+PROCESSES = [FINE, STANDARD, STRONG, DRAFT, ABS_PROC]
 
 
 # ============================================================================
@@ -627,7 +718,12 @@ PLA = replace(
     close_fan_the_first_x_layers=("1",), full_fan_speed_layer=("3",),
     fan_min_speed=("100",), fan_max_speed=("100",), fan_cooling_layer_time=("45",),
     overhang_fan_speed=("100",), overhang_fan_threshold=("25%",),
-    slow_down_layer_time=("6",), slow_down_min_speed=("20",),
+    # 8 s y no 6. El 4020 radial stock de la S1 Pro es flojo, y en una capa de
+    # 1-2 segundos (un cubo de calibracion, la punta de un cono, un detalle
+    # fino) 6 s de piso no alcanzan a solidificar antes de que vuelva el
+    # nozzle: la punta queda blanda y traslucida. El costo esta acotado a las
+    # capas que YA son diminutas, asi que en tiempo absoluto es casi nada.
+    slow_down_layer_time=("8",), slow_down_min_speed=("20",),
     pressure_advance=("0.04",),
     filament_notes=("Printalot PLA - 1.75mm\n"
                     "Perfil para Ender 3 S1 Pro + Klipper, nozzle 0.4.\n"

@@ -246,13 +246,13 @@ medido y no de uno de fábrica.
  orca/
    orca.py              CLI unico
    orcakit/             el toolkit: perfiles, validaciones y parsers
-   orcakit/profiles.py  fuente de verdad de los 9 perfiles
+   orcakit/profiles.py  fuente de verdad de los 10 perfiles
    presets/             snapshot versionado, generado
    tests/               unittest de la stdlib, sin dependencias
    docs/                el porque de cada valor
 ```
 
-Un perfil de impresora, cuatro procesos y cuatro filamentos de Printalot,
+Un perfil de impresora, cinco procesos y cuatro filamentos de Printalot,
 calibrados contra esta máquina en particular. Ver `orca/README.md` para el
 detalle y `orca/docs/` para el razonamiento detrás de cada número.
 
@@ -314,12 +314,21 @@ En orden de impacto. El detalle de cada uno está en la sección 8 de
   conservadora, no una medición, y el mecanismo de auto-freno de OrcaSlicer solo
   protege si ese número es real. Es lo único de esta lista que puede estar
   afectando la calidad **ahora**. Sale de Calibration -> Max Flowrate.
-- **`[input_shaper]` sin calibrar.** Es el cambio que más rinde: `max_accel`
-  2000 es el techo contra el que están calibradas las aceleraciones de los 4
-  procesos, y lo que destraba no es la velocidad sino la *distancia de
-  aceleración*. Las secciones del acelerómetro USB están escritas y comentadas
-  en `versions/v3/hardware.cfg`; el procedimiento, en `limits.cfg`. `check`
-  falla si alguien sube la aceleración sin haber configurado el shaper.
+- **Nivelación y malla, del lado de la máquina.** No cuestan un peso y
+  condicionan todo lo demás: nivelar con `SCREWS_TILT_CALCULATE` en vez del
+  método del papel, y recalibrar la malla **con la cama caliente** (una palpada
+  en frío corrige una cama que no existe al imprimir).
+- **`[input_shaper]` sin calibrar.** Es el único cambio que mejora calidad y
+  velocidad a la vez: lo que destraba no es la velocidad sino la *distancia de
+  aceleración*. Mientras no exista, las aceleraciones de impresión se quedan en
+  el techo de ringing de 2000. Las secciones del acelerómetro USB están
+  escritas y comentadas en `versions/v3/hardware.cfg`; el procedimiento, en
+  `limits.cfg`. `check` falla si un proceso sube la aceleración de impresión sin
+  el shaper puesto.
+- **La frecuencia de resonancia de cada eje, sin medir.** La torre de ringing
+  (Calibration -> Input Shaper) la da en 20 minutos y sin hardware. Los 700
+  mm/s² de la pared exterior son hoy una intuición: la amplitud residual va como
+  `a / (2*pi*f)^2`, así que sin `f` no se sabe si sobran o faltan.
 - **Pressure advance sin calibrar fino.** Los valores de `variable_pa` son
   conservadores y típicos de un direct drive. El óptimo real de cada rollo sale
   de Calibration -> Pressure Advance en OrcaSlicer.

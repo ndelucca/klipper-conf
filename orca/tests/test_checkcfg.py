@@ -116,3 +116,62 @@ class TestIntegracion(unittest.TestCase):
         secciones = {f.section for f in r.findings}
         self.assertEqual(len(secciones), 6, secciones)
         self.assertGreater(len(r.findings), 40)
+
+
+class TestAceleraciones(unittest.TestCase):
+    """El techo mecánico y el presupuesto de ringing son dos cosas distintas.
+
+    Confundirlas es lo que hacía la versión anterior de esta regla, y costaba
+    velocidad de travel gratis: `[printer] max_accel` no podía subir aunque
+    ninguna aceleración de impresión se hubiera movido.
+    """
+
+    P = profiles.Process(
+        name="Proceso", inherits="x",
+        default_acceleration="1500",
+        outer_wall_acceleration="700",
+        sparse_infill_acceleration="100%",   # relativa: ya es fracción del techo
+        travel_acceleration="3000",
+        initial_layer_travel_acceleration=("3000",),
+    )
+
+    def _shaper(self, procesos, cfg):
+        r = Report()
+        with mock.patch.object(profiles, "PROCESSES", procesos):
+            checkcfg._input_shaper(r, cfg)
+        return r
+
+    def test_accels_saltea_las_relativas(self):
+        # "100%" no puede pasar un techo del que ya es una fracción.
+        self.assertNotIn("sparse_infill_acceleration", checkcfg._accels(self.P))
+
+    def test_el_techo_mecanico_incluye_el_travel(self):
+        self.assertIn("travel_acceleration", checkcfg._accels(self.P))
+        self.assertIn("initial_layer_travel_acceleration", checkcfg._accels(self.P))
+
+    def test_el_presupuesto_de_ringing_excluye_el_travel(self):
+        # El ringing de un desplazamiento por el aire no deja marca en la pieza.
+        accels = checkcfg._print_accels(self.P)
+        self.assertNotIn("travel_acceleration", accels)
+        self.assertNotIn("initial_layer_travel_acceleration", accels)
+        self.assertEqual(accels["default_acceleration"], 1500.0)
+
+    def test_max_accel_alto_con_acels_de_impresion_bajas_pasa(self):
+        # Regresion: antes esto fallaba solo por el valor de max_accel, aunque
+        # el travel sea justamente lo que tiene que poder usarlo entero.
+        cfg = {"printer": {"max_accel": "3000"}}
+        r = self._shaper([self.P], cfg)
+        self.assertEqual(r.failures, 0)
+
+    def test_una_acel_de_impresion_sobre_el_techo_de_ringing_falla(self):
+        malo = profiles.replace(
+            self.P, inner_wall_acceleration=str(checkcfg.RINGING_ACCEL + 500))
+        r = self._shaper([malo], {"printer": {"max_accel": "5000"}})
+        fallas = [f for f in r.findings if f.level is Level.FAIL]
+        self.assertEqual(len(fallas), 1)
+        self.assertIn("inner_wall_acceleration", fallas[0].detail)
+
+    def test_con_input_shaper_no_hay_techo_de_ringing(self):
+        malo = profiles.replace(self.P, inner_wall_acceleration="6000")
+        cfg = {"printer": {"max_accel": "6000"}, "input_shaper": {"shaper_freq_x": "40"}}
+        self.assertEqual(self._shaper([malo], cfg).failures, 0)

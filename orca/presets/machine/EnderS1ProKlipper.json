@@ -1,8 +1,6 @@
 {
     "auxiliary_fan": "0",
-    "bed_exclude_area": [
-        "0x0"
-    ],
+    "bed_exclude_area": [],
     "before_layer_change_gcode": ";BEFORE_LAYER_CHANGE\n;[layer_z]\n",
     "change_filament_gcode": "PAUSE",
     "default_filament_profile": [
@@ -26,28 +24,28 @@
     "layer_change_gcode": ";AFTER_LAYER_CHANGE\n;[layer_z]\nG92 E0\n",
     "machine_end_gcode": "END_PRINT\n",
     "machine_max_acceleration_e": [
-        "2000",
-        "2000"
+        "3000",
+        "3000"
     ],
     "machine_max_acceleration_extruding": [
-        "2000",
-        "2000"
+        "3000",
+        "3000"
     ],
     "machine_max_acceleration_retracting": [
-        "2000",
-        "2000"
+        "3000",
+        "3000"
     ],
     "machine_max_acceleration_travel": [
-        "2000",
-        "2000"
+        "3000",
+        "3000"
     ],
     "machine_max_acceleration_x": [
-        "2000",
-        "2000"
+        "3000",
+        "3000"
     ],
     "machine_max_acceleration_y": [
-        "2000",
-        "2000"
+        "3000",
+        "3000"
     ],
     "machine_max_acceleration_z": [
         "200",
@@ -143,7 +141,7 @@
         "0.6"
     ],
     "retraction_minimum_travel": [
-        "1"
+        "2"
     ],
     "retraction_speed": [
         "35"

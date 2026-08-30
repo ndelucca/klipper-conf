@@ -17,7 +17,7 @@ from pathlib import Path
 
 from orcakit import klippercfg, profiles, values
 from orcakit.klippercfg import Config
-from orcakit.presets import Filament, Machine
+from orcakit.presets import Filament, Machine, Process
 from orcakit.report import Report
 
 # Temperaturas de nozzle de un filamento: las que no pueden pasar el max_temp
@@ -40,7 +40,34 @@ DEFAULT_FADE_START = 1.0
 DEFAULT_FADE_END = 0.0
 
 # Techo de aceleración por encima del cual, sin input shaper, aparece ringing.
+#
+# Se aplica a las aceleraciones de IMPRESIÓN, no a `[printer] max_accel`. Son
+# cosas distintas y confundirlas cuesta velocidad: max_accel es el techo
+# mecánico de la máquina, y el travel puede usarlo entero porque el ringing de
+# un desplazamiento por el aire no deja marca en la pieza. Lo que hay que
+# mantener por debajo de este número es solo la aceleración con la que se
+# deposita plástico.
 RINGING_ACCEL = 2000
+
+# Las aceleraciones que no depositan plástico, y que por lo tanto quedan fuera
+# del presupuesto de ringing. Solo las limita el techo mecánico.
+TRAVEL_ACCEL_KEYS = ("travel_acceleration", "initial_layer_travel_acceleration")
+
+
+def _accels(p: Process) -> dict[str, float]:
+    """Aceleraciones absolutas de un proceso, en mm/s2.
+
+    Las relativas ("50%") se saltean: ya son una fracción del techo, así que no
+    lo pueden pasar.
+    """
+    return {k: v for k, raw in p.to_preset().items()
+            if k.endswith("_acceleration") and not values.is_pct(raw)
+            and (v := values.num(raw)) is not None}
+
+
+def _print_accels(p: Process) -> dict[str, float]:
+    """Solo las que dejan marca en la pieza: las de impresión."""
+    return {k: v for k, v in _accels(p).items() if k not in TRAVEL_ACCEL_KEYS}
 
 
 def _area(printable_area: tuple[str, ...] | None) -> tuple[float | None, float | None]:
@@ -143,14 +170,14 @@ def _limits(r: Report, m: Machine, cfg: Config) -> None:
     r.equal("machine_max_acceleration_z = max_z_accel",
             values.num(m.machine_max_acceleration_z), kzacc)
 
-    # Ninguna aceleración de ningún proceso puede pedir más que el techo de la
-    # máquina. Las relativas ("50%") se saltean: ya son fracción del techo.
+    # Ninguna aceleración de ningún proceso puede pedir más que el techo
+    # MECÁNICO de la máquina. Acá entra también el travel: max_accel es un
+    # límite físico y no lo saltea nadie. El techo de ringing, que es otra
+    # cosa y solo aplica a las de impresión, lo valida _input_shaper.
     r.gap()
     for p in profiles.PROCESSES:
-        over = [f"{k}={v:g}" for k, raw in p.to_preset().items()
-                if k.endswith("_acceleration") and not values.is_pct(raw)
-                and (v := values.num(raw)) is not None
-                and kacc is not None and v > kacc + 1e-9]
+        over = [f"{k}={v:g}" for k, v in _accels(p).items()
+                if kacc is not None and v > kacc + 1e-9]
         if over:
             r.fail(f"acels de {p.name} <= max_accel", ", ".join(over))
         else:
@@ -347,17 +374,36 @@ def _pressure_advance(r: Report, macros: dict[str, dict[str, str]],
 
 
 def _input_shaper(r: Report, cfg: Config) -> None:
+    """El presupuesto de ringing: cuánta aceleración tolera lo que se ve.
+
+    Mira las aceleraciones de IMPRESIÓN de cada proceso, no `max_accel`. La
+    versión anterior miraba max_accel y por lo tanto fallaba al subir el techo
+    mecánico aunque ninguna aceleración de impresión se hubiera movido, que es
+    exactamente lo que hay que poder hacer para que el travel respire.
+    """
     r.section("6. INPUT SHAPER")
     kacc = values.num(cfg.get("printer", {}).get("max_accel"))
+    techo = f"; max_accel={kacc:g} solo limita el travel" if kacc else ""
+
     if "input_shaper" in cfg:
-        r.ok("[input_shaper]", f"configurado; max_accel puede subir de {RINGING_ACCEL}")
-    elif kacc is not None and kacc > RINGING_ACCEL:
-        r.fail("[input_shaper]",
-               f"no configurado pero max_accel={kacc:g} > {RINGING_ACCEL}: "
-               f"va a haber ringing")
-    else:
         r.ok("[input_shaper]",
-             f"sin configurar, max_accel={kacc:g} se mantiene en el techo seguro")
+             "configurado: las acels de impresion ya no tienen techo de ringing")
+        return
+
+    r.ok("[input_shaper]",
+         f"sin configurar: techo de ringing {RINGING_ACCEL} "
+         f"sobre las acels de impresion{techo}")
+
+    r.gap()
+    for p in profiles.PROCESSES:
+        over = [f"{k}={v:g}" for k, v in _print_accels(p).items()
+                if v > RINGING_ACCEL + 1e-9]
+        if over:
+            r.fail(f"acels de impresion de {p.name}",
+                   f"> {RINGING_ACCEL} sin shaper: " + ", ".join(over))
+        else:
+            r.ok(f"acels de impresion de {p.name}",
+                 f"techo de ringing {RINGING_ACCEL}")
 
 
 def run(klipper_dir: Path | str) -> Report:

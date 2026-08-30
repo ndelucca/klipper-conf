@@ -389,10 +389,10 @@ footer{
     <li><a href="#s2">Hardware detectado</a></li>
     <li><a href="#s3">Archivos</a></li>
     <li><a href="#s4">Perfil de impresora</a></li>
-    <li><a href="#s5">Los 4 procesos</a></li>
+    <li><a href="#s5">Los 5 procesos</a></li>
     <li><a href="#s6">Los 4 filamentos</a></li>
     <li><a href="#s7">Cómo Orca frena solo</a></li>
-    <li><a href="#s8">Lo que falta calibrar</a></li>
+    <li><a href="#s8">Lo que falta medir</a></li>
     <li><a href="#s9">Verificación</a></li>
     <li><a href="#s10">Revisión de calidad</a></li>
     <li><a href="#s11">Backup</a></li>
@@ -452,13 +452,13 @@ footer{
  Extrusor          Sprite Pro direct drive, gear ratio 42:12
  Hotend            bimetálico, max_temp 300
  Cama              max_temp 110
- Probe             BLTouch, offset X -48 / Y 0, malla 6x6 guardada
+ Probe             BLTouch, offset X -48 / Y 0, malla 9x9 guardada, 2 samples
  Ventilador        uno solo de capa (4020 stock), sin auxiliar
  Sensor            filament runout en e0_sensor, pausa automática
 
  [printer]
    max_velocity        300 mm/s
-   max_accel          2000 mm/s2      &lt;- techo real de todo el perfil
+   max_accel          3000 mm/s2      &lt;- techo MECANICO (el de ringing es 2000)
    max_z_velocity       10 mm/s
    max_z_accel         200 mm/s2
 
@@ -514,7 +514,7 @@ footer{
   <ul>
     <li>Se eliminó el bundle importado <code>user\default\_local\49ea5240-…\</code>, que contenía el filamento suelto <code>Printalot PLA @Klipper</code>.</li>
     <li>Los filamentos genéricos de sistema visibles bajaron de 10 a 4: solo PLA, PETG, ABS y TPU, que son los padres de los perfiles Printalot.</li>
-    <li>Los 4 procesos y los 4 filamentos declaran <code>compatible_printers: ["EnderS1ProKlipper"]</code>, así que <strong>no aparecen si seleccionás otra impresora</strong>.</li>
+    <li>Los 5 procesos y los 4 filamentos declaran <code>compatible_printers: ["EnderS1ProKlipper"]</code>, así que <strong>no aparecen si seleccionás otra impresora</strong>.</li>
   </ul>
 
   <h3>Repositorio</h3>
@@ -547,12 +547,17 @@ footer{
   </table></div>
 
   <h3>Límites de máquina</h3>
-  <p>Son un espejo exacto de <code>printer.cfg</code>. <strong>No mandan sobre la impresora</strong>: sirven para que la estimación de tiempo de Orca sea real. Antes decían 3000 de aceleración cuando Klipper hace 2000, y por eso el tiempo estimado mentía.</p>
+  <p>Son un espejo exacto de <code>printer.cfg</code>. <strong>No mandan sobre la impresora</strong>: sirven para que la estimación de tiempo de Orca sea real.</p>
   <div class="term"><pre> machine_max_speed_x / y            300 mm/s
  machine_max_speed_z                 10 mm/s
- machine_max_acceleration_x / y    2000 mm/s2
- machine_max_acceleration_z         100 mm/s2
+ machine_max_acceleration_x / y    3000 mm/s2   &lt;- techo MECANICO, no de calidad
+ machine_max_acceleration_z         200 mm/s2
  machine_max_jerk_x / y               5      (= square corner velocity de Klipper)</pre></div>
+  <div class="note warn">
+    <span class="tag"><code>max_accel</code> no es el presupuesto de ringing</span>
+    <p>Son dos cosas distintas y estuvieron confundidas en un solo número. El <strong>techo mecánico</strong> (<code>max_accel</code>, hoy 3000) es hasta dónde puede acelerar la máquina sin perder pasos. El <strong>presupuesto de ringing</strong> (2000, y 700 en la pared exterior) es cuánta aceleración tolera la superficie que se ve.</p>
+    <p>El travel solo debe respetar el primero: el ringing de un desplazamiento por el aire no deja marca. Mientras estuvieron atados en 2000, llegar a los 250 mm/s de <code>travel_speed</code> exigía <strong>15.6 mm</strong> de recorrido y casi ningún travel de una pieza real es tan largo. Con 3000 son 10.4 mm. Ninguna aceleración de impresión se movió al hacer el cambio.</p>
+  </div>
   <p><code>emit_machine_limits_to_gcode</code> está en <strong>0</strong>: Orca no emite el bloque de <code>SET_VELOCITY_LIMIT</code> al inicio. Los límites los pone <code>printer.cfg</code>, que es la forma correcta de trabajar con Klipper. Las aceleraciones por feature sí se emiten como <code>M204</code>, que Klipper acepta sin problema.</p>
 
   <h3>Retracción</h3>
@@ -562,12 +567,12 @@ footer{
       <tr><td>Longitud</td><td class="n">0.6 mm</td></tr>
       <tr><td>Velocidad de retracción</td><td class="n">35 mm/s</td></tr>
       <tr><td>Velocidad de reinserción</td><td class="n">30 mm/s</td></tr>
-      <tr><td>Desplazamiento mínimo</td><td class="n">1 mm</td></tr>
+      <tr><td>Desplazamiento mínimo</td><td class="n">2 mm</td></tr>
       <tr><td>Z hop</td><td class="n">0.2 mm, Auto Lift</td></tr>
       <tr><td>Wipe</td><td class="n">activado, 1 mm</td></tr>
     </tbody>
   </table></div>
-  <p>0.6 mm es lo correcto para un direct drive. El perfil viejo tenía 0.5, que está en el límite bajo y deja stringing.</p>
+  <p>0.6 mm es lo correcto para un direct drive. El perfil viejo tenía 0.5, que está en el límite bajo y deja stringing. El desplazamiento mínimo estuvo en 1 mm, que hacía retraer en prácticamente cada travel: cada par retracción/reposición mete un transitorio de presión, y a 1 mm son cientos de oportunidades por capa de que <code>wipe</code> no lo tape.</p>
 
   <h3>G-code</h3>
   <div class="term gcode"><pre>; machine_start_gcode
@@ -595,25 +600,28 @@ END_PRINT</pre></div>
 
 <!-- ================= 5 ================= -->
 <section id="s5">
-  <h2><span class="num">05</span>Los 4 procesos</h2>
+  <h2><span class="num">05</span>Los 5 procesos</h2>
   <div class="rule"></div>
   <p>El <strong>proceso define la geometría y la ambición de velocidad</strong>; el <strong>filamento pone el techo de caudal</strong>. No hay procesos por material: eso lo resuelve solo Orca.</p>
 
   <div class="tblwrap"><table>
-    <colgroup><col><col><col class="hl"><col><col></colgroup>
-    <thead><tr><th></th><th class="n">Fine</th><th class="n">Standard</th><th class="n">Strong</th><th class="n">Draft</th></tr></thead>
+    <colgroup><col><col><col class="hl"><col><col><col></colgroup>
+    <thead><tr><th></th><th class="n">Fine</th><th class="n">Standard</th><th class="n">Strong</th><th class="n">Draft</th><th class="n">ABS</th></tr></thead>
     <tbody>
-      <tr><td>Altura de capa</td><td class="n">0.12</td><td class="n">0.20</td><td class="n">0.20</td><td class="n">0.28</td></tr>
-      <tr><td>Perímetros</td><td class="n">2</td><td class="n">2</td><td class="n">4</td><td class="n">2</td></tr>
-      <tr><td>Relleno</td><td class="n">15 % grid</td><td class="n">15 % grid</td><td class="n">40 % cubic</td><td class="n">10 % grid</td></tr>
-      <tr><td>Techo superior</td><td class="n">0.84 mm</td><td class="n">0.80 mm</td><td class="n">1.00 mm</td><td class="n">0.84 mm</td></tr>
-      <tr><td>Base</td><td class="n">0.60 mm</td><td class="n">0.60 mm</td><td class="n">0.80 mm</td><td class="n">0.56 mm</td></tr>
-      <tr><td>Pared exterior</td><td class="n">45 mm/s</td><td class="n">50 mm/s</td><td class="n">50 mm/s</td><td class="n">50 mm/s</td></tr>
-      <tr><td>Pared interior</td><td class="n">120 mm/s</td><td class="n">110 mm/s</td><td class="n">100 mm/s</td><td class="n">80 mm/s</td></tr>
-      <tr><td>Relleno disperso</td><td class="n">140 mm/s</td><td class="n">120 mm/s</td><td class="n">110 mm/s</td><td class="n">75 mm/s</td></tr>
-      <tr><td>Relleno sólido</td><td class="n">130 mm/s</td><td class="n">120 mm/s</td><td class="n">110 mm/s</td><td class="n">80 mm/s</td></tr>
-      <tr><td>Superficie superior</td><td class="n">40 mm/s</td><td class="n">45 mm/s</td><td class="n">45 mm/s</td><td class="n">45 mm/s</td></tr>
-      <tr><td>Caudal pico</td><td class="n">7.6 mm³/s</td><td class="n">10.8 mm³/s</td><td class="n">9.9 mm³/s</td><td class="n">10.8 mm³/s</td></tr>
+      <tr><td>Altura de capa</td><td class="n">0.12</td><td class="n">0.20</td><td class="n">0.20</td><td class="n">0.28</td><td class="n">0.20</td></tr>
+      <tr><td>Perímetros</td><td class="n">2</td><td class="n">2</td><td class="n">4</td><td class="n">2</td><td class="n">2</td></tr>
+      <tr><td>Relleno</td><td class="n">15 % gyroid</td><td class="n">15 % gyroid</td><td class="n">40 % cubic</td><td class="n">10 % gyroid</td><td class="n">15 % gyroid</td></tr>
+      <tr><td>Techo superior</td><td class="n">0.84 mm</td><td class="n">0.80 mm</td><td class="n">1.00 mm</td><td class="n">0.84 mm</td><td class="n">0.80 mm</td></tr>
+      <tr><td>Base</td><td class="n">0.60 mm</td><td class="n">0.60 mm</td><td class="n">0.80 mm</td><td class="n">0.56 mm</td><td class="n">0.60 mm</td></tr>
+      <tr><td>Pared exterior</td><td class="n">45 mm/s</td><td class="n">50 mm/s</td><td class="n">50 mm/s</td><td class="n">50 mm/s</td><td class="n">50 mm/s</td></tr>
+      <tr><td>Pared interior</td><td class="n">120 mm/s</td><td class="n">110 mm/s</td><td class="n">100 mm/s</td><td class="n">80 mm/s</td><td class="n">110 mm/s</td></tr>
+      <tr><td>Relleno disperso</td><td class="n">140 mm/s</td><td class="n">110 mm/s</td><td class="n">110 mm/s</td><td class="n">75 mm/s</td><td class="n">110 mm/s</td></tr>
+      <tr><td>Relleno sólido</td><td class="n">130 mm/s</td><td class="n">115 mm/s</td><td class="n">110 mm/s</td><td class="n">80 mm/s</td><td class="n">115 mm/s</td></tr>
+      <tr><td>Superficie superior</td><td class="n">40 mm/s</td><td class="n">45 mm/s</td><td class="n">45 mm/s</td><td class="n">45 mm/s</td><td class="n">45 mm/s</td></tr>
+      <tr><td>Caudal pico</td><td class="n">7.6 mm³/s</td><td class="n">9.9 mm³/s</td><td class="n">9.9 mm³/s</td><td class="n">10.8 mm³/s</td><td class="n">9.9 mm³/s</td></tr>
+      <tr><td>Planchado</td><td class="n">sí</td><td class="n">sí</td><td class="n">no</td><td class="n">no</td><td class="n">sí</td></tr>
+      <tr><td>Brim</td><td class="n">auto</td><td class="n">auto</td><td class="n">auto</td><td class="n">auto</td><td class="n">outer_only 8 mm</td></tr>
+      <tr><td>Draft shield</td><td class="n">no</td><td class="n">no</td><td class="n">no</td><td class="n">no</td><td class="n">sí</td></tr>
     </tbody>
   </table></div>
 
@@ -623,18 +631,37 @@ END_PRINT</pre></div>
     <li><strong>0.20mm Standard</strong> · el de todos los días. Es el default de la impresora.</li>
     <li><strong>0.20mm Strong</strong> · piezas funcionales. 4 perímetros y 40 % de relleno cubic, que es isotrópico y no cruza la boquilla consigo misma como el grid a densidad alta. Más lento a propósito, para que las capas peguen mejor.</li>
     <li><strong>0.28mm Draft</strong> · prototipos y piezas grandes. Acá el límite es el caudal del hotend: a 0.28 de capa cada milímetro de recorrido mueve mucho más plástico, así que las velocidades bajan aunque el tiempo total mejore mucho.</li>
+    <li><strong>0.20mm ABS</strong> · Standard con lo que el ABS necesita para sobrevivir a una impresora <strong>sin encerramiento</strong>.</li>
   </ul>
 
-  <h3>Aceleraciones, idénticas en los cuatro</h3>
-  <div class="term"><pre> Pared exterior             700 mm/s2   &lt;- lo que se ve, lo mas suave posible
+  <h3>Por qué el ABS sí necesita su propio proceso</h3>
+  <p>Es la excepción a la regla de "el filamento resuelve el material solo", y no por gusto: <strong><code>brim_type</code> y <code>draft_shield</code> son claves de proceso, y en OrcaSlicer un filamento no puede pisar una clave de proceso.</strong> Las notas del filamento ABS decían "Obligatorio en el proceso: Brim outer_only 8mm". O sea que la fuente de verdad documentaba un paso manual en la UI, sin verificación posible, para el único material donde los defaults del proceso están realmente mal.</p>
+  <div class="note warn">
+    <span class="tag">Lo que deliberadamente NO cambia: la velocidad</span>
+    <p>Suena razonable imprimir ABS más lento "para que no warpee", y es al revés. Sin caja, el modo de falla dominante es la <strong>delaminación</strong>: la capa de abajo se enfría de más antes de que llegue la de arriba. Ir más lento le da <em>más</em> tiempo para enfriarse, no menos. Es el mismo razonamiento por el que el filamento va a 255 y no a 245. Bajar la aceleración solo ayudaría si la pieza se despegara de la cama por inercia, y para eso está el brim.</p>
+  </div>
+
+  <h3>Aceleraciones, idénticas en todos</h3>
+  <div class="term"><pre> --- presupuesto de ringing: deposita plastico, se ve ---
+ Pared exterior             700 mm/s2   &lt;- lo que se ve, lo mas suave posible
  Superficie superior        700 mm/s2
  Pared interior            2000 mm/s2
  Relleno sólido            2000 mm/s2
  General                   2000 mm/s2
- Desplazamiento            2000 mm/s2
  Primera capa               500 mm/s2
- Puentes                     50%  (= 1000)</pre></div>
+ Puentes                     50%  (= 1000)
+
+ --- techo mecanico: por el aire, no deja marca ---
+ Desplazamiento            3000 mm/s2   &lt;- = [printer] max_accel
+ Desplazamiento 1a capa    1000 mm/s2</pre></div>
+  <p>El corte entre los dos bloques es el que valida <code>orca.py check</code>: compara <strong>solo el primero</strong> contra el techo de ringing de 2000.</p>
   <p><code>default_jerk</code> está en 0 a propósito: así Orca no toca el square corner velocity y lo maneja Klipper con su default de 5. Fine usa 600 mm/s² en pared exterior y superficie superior en vez de 700, porque a 0.12 de capa el ringing se nota más. Draft va al revés: 1000, porque prioriza tiempo.</p>
+  <p>Los 700 y los 2000 son, hoy, una intuición y no una medición. La amplitud residual de vibración va como <code>a / (2·π·f)²</code>, o sea que <strong>el número que falta es la frecuencia de resonancia de cada eje</strong>, no la aceleración.</p>
+  <div class="term"><pre>  f (Hz)     a=700   a=1000   a=2000   a=4000      (micras)
+    25        28       41       81      162
+    40        11       16       32       63
+    60         5        7       14       28</pre></div>
+  <p>El umbral de lo que se ve a contraluz anda por las 20-30 micras. Si X resuena a 40-60 Hz (lo típico de un carro liviano), 700 está dejando velocidad sobre la mesa; si Y, que mueve la cama con la pieza encima, resuena a 25 Hz, 700 ya está al filo. <strong>Las dos cosas pueden ser ciertas a la vez, en ejes distintos</strong>, y hoy hay un solo número para los dos.</p>
 
   <h3>Ajustes de calidad activados</h3>
   <div class="tblwrap"><table>
@@ -643,6 +670,7 @@ END_PRINT</pre></div>
       <tr><td><code>wall_generator</code></td><td class="n">arachne</td><td>Ancho de pared variable. Resuelve mucho mejor paredes finas y detalles chicos que el modo clásico</td></tr>
       <tr><td><code>precise_outer_wall</code></td><td class="n">sí</td><td>Precisión dimensional: la pieza sale con la medida real del modelo</td></tr>
       <tr><td><code>only_one_wall_top</code></td><td class="n">sí</td><td>Un solo perímetro en la última capa, deja techos más limpios</td></tr>
+      <tr><td><code>ironing_type</code></td><td class="n">top · Fine y Standard</td><td><strong>Planchado.</strong> <code>monotonicline</code> ordena las pasadas de la cara superior y <code>only_one_wall_top</code> le saca la costura del medio, pero entre línea y línea sigue quedando el valle del propio cordón. El planchado lo rellena pasando el nozzle casi vacío por encima (flow 10 %, spacing 0.15, 30 mm/s). Cuesta tiempo <strong>solo</strong> en caras superiores. En Strong y Draft no va, por el mismo criterio que el scarf joint</td></tr>
       <tr><td><code>ensure_vertical_shell_thickness</code></td><td class="n">moderate</td><td>Evita agujeros en paredes casi verticales sin inflar el tiempo</td></tr>
       <tr><td><code>seam_position</code></td><td class="n">aligned</td><td>Costura alineada en una columna</td></tr>
       <tr><td><code>staggered_inner_seams</code></td><td class="n">sí</td><td>Escalona las costuras internas, no se apilan todas</td></tr>
@@ -724,29 +752,32 @@ END_PRINT</pre></div>
 <section id="s7">
   <h2><span class="num">07</span>Cómo Orca frena solo</h2>
   <div class="rule"></div>
-  <p>Este es el motivo por el que 4 procesos alcanzan para 4 materiales muy distintos.</p>
+  <p>Este es el motivo por el que un puñado de procesos alcanza para 4 materiales muy distintos, y por el que solo el ABS necesitó uno propio (y no por caudal, sino por brim y draft shield).</p>
   <p>Cada filamento declara <code>filament_max_volumetric_speed</code>: cuántos mm³ de plástico por segundo puede fundir el hotend con ese material. Al laminar, Orca calcula el caudal de cada movimiento y, si supera el techo, <strong>baja la velocidad de ese movimiento</strong> hasta que entre. No lo hace globalmente sino feature por feature.</p>
 
   <div class="term"><pre> caudal (mm3/s) = altura de capa  x  ancho de línea  x  velocidad</pre></div>
 
   <h3>Proceso Standard contra cada material</h3>
   <div class="gauges">
-    <div class="gauge"><span class="lbl">PLA · techo 10</span><span class="track"><span class="fill" style="width:100%"></span><span class="ceil" style="left:100%"></span></span><span class="val">frena a 111</span></div>
-    <div class="gauge"><span class="lbl">ABS · techo 10</span><span class="track"><span class="fill over" style="width:100%"></span><span class="ceil" style="left:92.6%"></span></span><span class="val">frena</span></div>
-    <div class="gauge"><span class="lbl">PETG · techo 9</span><span class="track"><span class="fill over" style="width:100%"></span><span class="ceil" style="left:83.3%"></span></span><span class="val">frena</span></div>
-    <div class="gauge"><span class="lbl">TPU · techo 3.5</span><span class="track"><span class="fill over" style="width:100%"></span><span class="ceil" style="left:32.4%"></span></span><span class="val">frena</span></div>
+    <div class="gauge"><span class="lbl">PLA · techo 10</span><span class="track"><span class="fill" style="width:99%"></span><span class="ceil" style="left:100%"></span></span><span class="val">9.9 · ok</span></div>
+    <div class="gauge"><span class="lbl">ABS · techo 10</span><span class="track"><span class="fill" style="width:99%"></span><span class="ceil" style="left:100%"></span></span><span class="val">9.9 · ok</span></div>
+    <div class="gauge"><span class="lbl">PETG · techo 9</span><span class="track"><span class="fill over" style="width:99%"></span><span class="ceil" style="left:90%"></span></span><span class="val">frena a 100</span></div>
+    <div class="gauge"><span class="lbl">TPU · techo 3.5</span><span class="track"><span class="fill over" style="width:99%"></span><span class="ceil" style="left:35%"></span></span><span class="val">frena a 39</span></div>
   </div>
-  <p class="figcap">La barra es el caudal que pide el proceso Standard (10.8 mm³/s). La línea vertical es el techo que declara cada filamento. Donde la barra pasa la línea, Orca reduce la velocidad de esa feature.</p>
+  <p class="figcap">La barra es el caudal que pide el proceso Standard (9.9 mm³/s). La línea vertical es el techo que declara cada filamento. Donde la barra pasa la línea, Orca reduce la velocidad de esa feature.</p>
 
-  <p>Antes el techo del PLA decía 11 y Standard estaba afinado para pedir 10.8: el 98&nbsp;%, sin tocar nunca el límite. Sonaba elegante y era frágil, porque ese 11 nunca se midió. <strong>El auto-freno solo protege si el número que lo dispara es honesto</strong>: con un techo optimista Orca no frena y el relleno sub-extruye sin dar síntoma. Ahora el techo es 10 y Standard sí lo toca: el relleno baja de 120 a 111&nbsp;mm/s, un ~1&nbsp;% de tiempo, y el perfil queda correcto dé lo que dé la medición.</p>
+  <p>Standard es el único proceso cuyo principio de diseño es <strong>no tocar nunca el techo del PLA</strong>: corre a la velocidad nominal y el auto-freno queda de red para los otros materiales.</p>
+
+  <p>Llegar ahí costó dos correcciones. El techo del PLA decía 11, un número que nunca se midió, y Standard pedía 10.8 contra él: el 98&nbsp;%, sin tocar el límite. Sonaba elegante y era frágil, porque <strong>el auto-freno solo protege si el número que lo dispara es honesto</strong> — con un techo optimista Orca no frena y el relleno sub-extruye sin dar síntoma. Bajado el techo a 10, esos nominales de 120 pasaban a ejecutarse a 111: el archivo decía una cosa y la impresora hacía otra. Por eso hoy son 110 y 115, calculados para dar 9.90 y 9.66.</p>
 
   <div class="tblwrap"><table>
     <thead><tr><th>Proceso</th><th class="n">Pico</th><th class="n">PLA (10)</th><th class="n">PETG (9)</th><th class="n">ABS (10)</th><th class="n">TPU (3.5)</th></tr></thead>
     <tbody>
       <tr><td>0.12mm Fine</td><td class="n">7.6</td><td class="n"><span class="chip ok">ok</span></td><td class="n"><span class="chip ok">ok</span></td><td class="n"><span class="chip ok">ok</span></td><td class="n"><span class="chip slow">frena</span></td></tr>
-      <tr><td>0.20mm Standard</td><td class="n">10.8</td><td class="n"><span class="chip slow">frena</span></td><td class="n"><span class="chip slow">frena</span></td><td class="n"><span class="chip slow">frena</span></td><td class="n"><span class="chip slow">frena</span></td></tr>
+      <tr><td>0.20mm Standard</td><td class="n">9.9</td><td class="n"><span class="chip ok">ok</span></td><td class="n"><span class="chip slow">frena</span></td><td class="n"><span class="chip ok">ok</span></td><td class="n"><span class="chip slow">frena</span></td></tr>
       <tr><td>0.20mm Strong</td><td class="n">9.9</td><td class="n"><span class="chip ok">ok</span></td><td class="n"><span class="chip slow">frena</span></td><td class="n"><span class="chip ok">ok</span></td><td class="n"><span class="chip slow">frena</span></td></tr>
       <tr><td>0.28mm Draft</td><td class="n">10.8</td><td class="n"><span class="chip slow">frena</span></td><td class="n"><span class="chip slow">frena</span></td><td class="n"><span class="chip slow">frena</span></td><td class="n"><span class="chip slow">frena</span></td></tr>
+      <tr><td>0.20mm ABS</td><td class="n">9.9</td><td class="n"><span class="chip ok">ok</span></td><td class="n"><span class="chip slow">frena</span></td><td class="n"><span class="chip ok">ok</span></td><td class="n"><span class="chip slow">frena</span></td></tr>
     </tbody>
   </table></div>
   <p><span class="chip slow">frena</span> no es un error: es el sistema funcionando. Significa que el proceso pide más caudal del que ese material tolera y Orca lo ajusta solo.</p>
@@ -754,64 +785,100 @@ END_PRINT</pre></div>
 
 <!-- ================= 8 ================= -->
 <section id="s8">
-  <h2><span class="num">08</span>Lo que falta calibrar, y es lo que más rinde</h2>
+  <h2><span class="num">08</span>Lo que falta medir, en orden</h2>
   <div class="rule"></div>
-  <p>Elegiste dejar el firmware como está por ahora, así que el perfil está calibrado contra el techo actual: 2000 mm/s² de aceleración, sin input shaper y sin pressure advance.</p>
+  <p>Esta configuración está razonada de punta a punta, pero descansa sobre <strong>constantes genéricas, no sobre mediciones de esta máquina</strong>: el caudal máximo, el flow ratio, el pressure advance, la compensación de agujeros y la frecuencia de resonancia de cada eje. Todos están documentados como suposiciones donde viven, y esta es la lista para convertirlos en datos.</p>
 
   <div class="note warn">
-    <span class="tag">El perfil está dejando velocidad sobre la mesa</span>
-    <p>Con Klipper calibrado, esta misma impresora hace tranquilamente el doble de aceleración y paredes exteriores bastante más rápidas, con mejor calidad que ahora.</p>
+    <span class="tag">El orden importa</span>
+    <p>Cada paso asume que el anterior está hecho. Nivelar después de calibrar el flujo significa recalibrar el flujo.</p>
   </div>
 
-  <h3>Orden de calibración</h3>
-  <p>Hacelo en este orden, sin saltear, porque cada paso depende del anterior.</p>
-  <div class="term"><pre> 1. FLOW RATE
-    OrcaSlicer -&gt; Calibration -&gt; Flow Rate (pass 1, después pass 2)
-    Ajusta filament_flow_ratio. Sin esto todo lo demás mide mal.
+  <h3>Fase A · la máquina física</h3>
+  <p>No cuesta un peso y no toca el firmware.</p>
+  <div class="term"><pre> A1. NIVELACION MECANICA                                  ~1 h, una sola vez
+     Con la cama a 60 grados:   SCREWS_TILT_CALCULATE
+     Devuelve, por tornillo:    "fondo derecha : adjust CW 00:30"
+     Girar y repetir hasta que los cuatro den 00:00 a 00:05.
 
- 2. TEMPERATURA
-    OrcaSlicer -&gt; Calibration -&gt; Temperature Tower
-    Confirmá los valores contra la etiqueta del rollo de Printalot.
+     POR QUE PRIMERO: la malla corrige el residuo de una cama nivelada, no
+     reemplaza a nivelarla. Y no puede: fade_end 10 la desvanece, asi que de
+     Z=10 para arriba la pieza sale sobre la cama real, torcida y todo.
 
- 3. PRESSURE ADVANCE                       &lt;- el de mayor impacto
-    OrcaSlicer -&gt; Calibration -&gt; Pressure Advance (modo Tower)
-    Lo pone KLIPPER, no el laminador: la tabla variable_pa del macro
-    START_PRINT en versions/&lt;CURRENT&gt;/macros.cfg.
-      PLA 0.04   PETG 0.06   ABS 0.05   TPU 0.6
-    Para afinarlo, corré el test y después cambiá el valor EN LOS DOS LADOS
-    (variable_pa y la clave pressure_advance del filamento en profiles.py).
-    orca.py check falla si quedan distintos.
+ A2. MALLA, EN CALIENTE                                   ~15 min, una vez
+     Con la cama a la temperatura a la que imprimis (60 para PLA):
+         BED_MESH_CALIBRATE  ->  SAVE_CONFIG
+     Son 81 puntos x 2 samples: tarda. Se paga una sola vez, porque
+     START_PRINT carga la malla guardada y no re-palpa en cada impresion.
 
- 4. INPUT SHAPER                           &lt;- requiere tocar printer.cfg
-    Con ADXL345: SHAPER_CALIBRATE y después SAVE_CONFIG.
-    Sin acelerómetro: imprimir un ringing tower y elegir a ojo.
-    Recién después de esto tiene sentido subir max_accel.
+     OJO: en frio no sirve. Aluminio con PEI encima cambia de forma decenas
+     de micras entre 20 y 60 grados. Una malla palpada en frio corrige una
+     cama que no existe al imprimir, y es una de las causas tipicas de que
+     el z_offset sirva para PLA y no para ABS.
 
- 5. MAX FLOWRATE
-    OrcaSlicer -&gt; Calibration -&gt; Max Flowrate
-    Confirma o corrige los mm3/s de cada filamento.
+ A3. Z OFFSET                                             ~15 min
+     PROBE_CALIBRATE -> TESTZ Z=-0.05 ... -> ACCEPT -> SAVE_CONFIG
+     O babystepear durante una primera capa y promoverlo despues con
+     Z_OFFSET_APPLY_PROBE + SAVE_CONFIG. Un babystep suelto NO sobrevive:
+     START_PRINT hace SET_GCODE_OFFSET Z=0.
 
- 6. RETRACCIÓN
-    OrcaSlicer -&gt; Calibration -&gt; Retraction test</pre></div>
-  <p>Los pasos 1, 2, 3, 5 y 6 <strong>no tocan el firmware</strong>. Solo el 4 requiere editar <code>printer.cfg</code>.</p>
+ A4. TORRE DE RINGING                                     ~20 min
+     OrcaSlicer -&gt; Calibration -&gt; Input Shaper (la torre, no el ADXL)
+     Medir la separacion entre ondas, en mm, por eje:
+         f = velocidad_del_test / separacion
+     Da la frecuencia de resonancia de cada eje sin comprar nada. Es la
+     medicion de mayor valor por minuto invertido de toda la lista, y es
+     previa a decidir si el ADXL vale la pena.</pre></div>
 
-  <h3>Valores a subir después de calibrar</h3>
+  <h3>Fase B · el material</h3>
+  <div class="term"><pre> B1. MAX FLOWRATE                       &lt;- el unico que puede estar afectando
+     OrcaSlicer -&gt; Calibration -&gt; Max Flowrate    la calidad AHORA MISMO
+     -&gt; filament_max_volumetric_speed
+     El auto-freno solo protege si el numero que lo dispara es honesto. Con
+     un techo optimista Orca no frena y el relleno sub-extruye sin sintoma.
+
+ B2. FLOW RATE            -&gt; filament_flow_ratio
+     Sin esto todo lo que se mida despues mide mal.
+
+ B3. TEMPERATURA          -&gt; nozzle_temperature
+
+ B4. PRESSURE ADVANCE                   &lt;- el de mas impacto visual
+     Lo pone KLIPPER: la tabla variable_pa del macro START_PRINT.
+       PLA 0.04   PETG 0.06   ABS 0.05   TPU 0.6
+     Cambiar EN LOS DOS LADOS (variable_pa y pressure_advance del
+     filamento). orca.py check falla si quedan distintos.
+
+ B5. RETRACCION           -&gt; Calibration -&gt; Retraction test
+
+ B6. TOLERANCIA           -&gt; xy_hole_compensation, elefant_foot_compensation
+         xy_hole_compensation = (nominal - medido) / 2
+     Sin compensar A PROPOSITO: una compensacion mal puesta se aplica a
+     todos los agujeros e introduce un error sistematico en la direccion
+     contraria. Peor que no compensar.</pre></div>
+
+  <h3>Fase C · input shaper</h3>
+  <p>Es el único cambio de toda la lista que mejora <strong>calidad y velocidad a la vez</strong>. Todo lo demás es una permuta. Pero llegar acá sin haber hecho A1 y A2 es acelerar sobre una cama que no conocés.</p>
+  <p>Las secciones <code>[mcu adxl]</code> / <code>[adxl345]</code> / <code>[resonance_tester]</code> ya están escritas y comentadas en <code>hardware.cfg</code>; el procedimiento completo, en <code>limits.cfg</code>. Dos cosas que se pierden fácil: Klipper <strong>no arranca</strong> si esas secciones están activas y la placa desenchufada, y en un bed slinger <strong>Y se mide con el acelerómetro en la cama</strong>, no en el carro — en Y no se mueve el hotend, se mueve la cama con la pieza encima, y su resonancia cambia con el peso de lo que se esté imprimiendo.</p>
+
+  <h3>Valores a subir después del input shaper</h3>
+  <p>Ojo con qué se mueve. <code>[printer] max_accel</code> es el techo <strong>mecánico</strong> y ya está en 3000 para que respire el travel; lo que el shaper destraba es el <strong>presupuesto de ringing</strong>, que son las aceleraciones de impresión.</p>
   <div class="tblwrap"><table>
     <thead><tr><th>Ajuste</th><th class="n">Ahora</th><th class="n">Post input shaper</th></tr></thead>
     <tbody>
-      <tr><td><code>max_accel</code> en Klipper</td><td class="n">2000</td><td class="n">4000</td></tr>
+      <tr><td><code>max_accel</code> en Klipper</td><td class="n">3000</td><td class="n">5000</td></tr>
       <tr><td><code>default_acceleration</code></td><td class="n">2000</td><td class="n">4000</td></tr>
       <tr><td><code>inner_wall_acceleration</code></td><td class="n">2000</td><td class="n">4000</td></tr>
       <tr><td><code>outer_wall_acceleration</code></td><td class="n">700</td><td class="n">2500</td></tr>
       <tr><td><code>top_surface_acceleration</code></td><td class="n">700</td><td class="n">2500</td></tr>
-      <tr><td><code>travel_acceleration</code></td><td class="n">2000</td><td class="n">5000</td></tr>
+      <tr><td><code>travel_acceleration</code></td><td class="n">3000</td><td class="n">5000</td></tr>
       <tr><td><code>initial_layer_acceleration</code></td><td class="n">500</td><td class="n">500 · no tocar</td></tr>
-      <tr><td><code>outer_wall_speed</code> (Standard)</td><td class="n">60</td><td class="n">90</td></tr>
+      <tr><td><code>outer_wall_speed</code> (Standard)</td><td class="n">50</td><td class="n">90</td></tr>
       <tr><td><code>inner_wall_speed</code> (Standard)</td><td class="n">110</td><td class="n">150 ⚠</td></tr>
       <tr><td><code>travel_speed</code></td><td class="n">250</td><td class="n">280</td></tr>
     </tbody>
   </table></div>
-  <p>⚠ Ojo con <code>inner_wall_speed</code>: a 150 mm/s con capa 0.20 y ancho 0.45 el caudal es 13.5 mm³/s, por encima del techo del hotend. Si subís ahí, el paso 5 deja de ser opcional. Es probable que el hotend stock sea el cuello de botella real y no la mecánica.</p>
+  <p>⚠ Ojo con <code>inner_wall_speed</code>: a 150 mm/s con capa 0.20 y ancho 0.45 el caudal es 13.5 mm³/s, muy por encima del techo del hotend. Si subís ahí, B1 deja de ser opcional. Es probable que el hotend stock sea el cuello de botella real y no la mecánica.</p>
+  <p>Recordá que <code>machine_max_acceleration_x / y</code> tienen que seguir a <code>max_accel</code> o <code>check</code> falla: son su espejo para la estimación de tiempo.</p>
   <p>Editá <code>orcakit/profiles.py</code> y corré <code>python orca.py build</code>, así los cambios quedan en un solo lugar y no dispersos en la UI. El diff de git en <code>presets/</code> te muestra exactamente qué cambió en la configuración.</p>
 </section>
 
@@ -895,7 +962,7 @@ END_PRINT</pre></div>
  |
  +-- orca/                      EL LAMINADOR
  |   +-- orca.py                    CLI: where build install verify audit check
- |   +-- orcakit/profiles.py       FUENTE DE VERDAD: los 9 perfiles
+ |   +-- orcakit/profiles.py       FUENTE DE VERDAD: los 10 perfiles
  |   +-- orcakit/presets.py        la forma de un preset (dataclasses, sin valores)
  |   +-- orcakit/snapshot.py       construcción y comparación de presets/
  |   +-- orcakit/values.py         los valores de texto de Orca y Klipper, a números
@@ -927,7 +994,12 @@ END_PRINT</pre></div>
     <tbody>
       <tr><td>Aceleraciones a 2000 y no más</td><td>Es el <code>max_accel</code> real de tu <code>printer.cfg</code>. Pedir más solo hace que la estimación de tiempo mienta</td></tr>
       <tr><td>Pared exterior a 700 mm/s²</td><td>Sin input shaper, la mitad del techo es lo que mantiene las esquinas limpias</td></tr>
-      <tr><td>4 procesos y no 4×4 por material</td><td>El techo de caudal del filamento hace el ajuste por material automáticamente</td></tr>
+      <tr><td>Un proceso por geometría y no 5×4 por material</td><td>El techo de caudal del filamento hace el ajuste por material automáticamente</td></tr>
+      <tr><td>ABS es la única excepción, con proceso propio</td><td><code>brim_type</code> y <code>draft_shield</code> son claves de PROCESO y un filamento no las puede pisar. Sin el quinto proceso, la fuente de verdad documentaba un paso manual en la UI que <code>check</code> no podía verificar</td></tr>
+      <tr><td>El proceso ABS NO baja la velocidad</td><td>Sin caja, el modo de falla es la delaminación: ir más lento le da más tiempo a la capa de abajo para enfriarse. La contramedida es más calor por capa, no menos velocidad</td></tr>
+      <tr><td>Planchado solo en Fine y Standard</td><td>Es la mitad que faltaba de la cara superior, y cuesta tiempo solo ahí</td></tr>
+      <tr><td><code>samples: 2</code> en el BLTouch y malla 9×9</td><td>El default era UNA lectura por punto y un paso de 39×44 mm. Como <code>START_PRINT</code> carga una malla guardada en vez de re-palpar, ser más denso y más lento cuesta cero tiempo de impresión</td></tr>
+      <tr><td><code>screws_tilt_adjust</code> además de <code>bed_screws</code></td><td>Había un probe y se nivelaba con un papel. La malla corrige el residuo de una cama nivelada; no la reemplaza, porque <code>fade_end: 10</code> la desvanece</td></tr>
       <tr><td>Perfiles que heredan en vez de autocontenidos</td><td>Sobreviven a las actualizaciones de OrcaSlicer</td></tr>
       <tr><td><code>compatible_printers</code> en todo</td><td>Listas limpias: solo ves lo que aplica a esta impresora</td></tr>
       <tr><td>Pressure advance pre-cargado pero apagado</td><td>Elegiste no tocar firmware; queda a un click y sin sorpresas</td></tr>

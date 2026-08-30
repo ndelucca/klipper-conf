@@ -50,12 +50,19 @@ class TestGarantiasDeLaDataclass(unittest.TestCase):
             Filament(name="F", inherits="i").to_preset()["filament_settings_id"], ["F"])
 
 
-class TestLosNueveperfiles(unittest.TestCase):
+class TestTodosLosPerfiles(unittest.TestCase):
 
-    def test_son_nueve(self):
-        self.assertEqual(len(profiles.all_presets()), 9)
-        self.assertEqual(len(profiles.PROCESSES), 4)
-        self.assertEqual(len(profiles.FILAMENTS), 4)
+    def test_all_presets_cubre_la_maquina_los_procesos_y_los_filamentos(self):
+        # Derivado de las listas y no cableado a un numero: agregar un proceso
+        # es una operacion normal de este repo, y no tiene por que romper un
+        # test que no habla de eso.
+        self.assertEqual(
+            len(profiles.all_presets()),
+            1 + len(profiles.PROCESSES) + len(profiles.FILAMENTS))
+
+    def test_cada_proceso_declara_su_altura_de_capa(self):
+        for p in profiles.PROCESSES:
+            self.assertTrue(p.layer_height, f"{p.name} sin layer_height")
 
     def test_los_nombres_no_se_repiten(self):
         names = [e.name for e in profiles.all_presets()]

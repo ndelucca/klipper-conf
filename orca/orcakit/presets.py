@@ -217,6 +217,12 @@ class Process(_Serializable):
     internal_solid_infill_pattern: Setting = None
     top_surface_pattern: Setting = None
     bottom_surface_pattern: Setting = None
+    ironing_type: Setting = None
+    ironing_pattern: Setting = None
+    ironing_flow: Setting = None
+    ironing_speed: Setting = None
+    ironing_spacing: Setting = None
+    ironing_angle: Setting = None
     is_infill_first: Setting = None
     reduce_infill_retraction: Setting = None
     bridge_flow: Setting = None
