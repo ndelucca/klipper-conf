@@ -48,11 +48,14 @@ El criterio con el que está repartida la configuración:
    CURRENT              contiene el nombre de la version viva. Fuente de verdad
    v1/  v2/             congeladas, referencia historica
    v3/
-     hardware.cfg       pines, sensores, PID, offsets del probe, geometria
+     hardware.cfg       pines, sensores, geometria, offsets X/Y del probe.
+                        NO lleva PID ni z_offset: ver "las semillas" abajo
      limits.cfg         [printer] [gcode_arcs] [exclude_object] [idle_timeout]
      macros.cfg         START_PRINT / END_PRINT / M0 / m300
-                        DESCARGAR_FILAMENTO / CALIBRAR_PID
-     printer.cfg.example  plantilla del archivo mutable
+                        DESCARGAR_FILAMENTO / CALIBRAR_PID_NOZZLE
+                        CALIBRAR_PID_CAMA
+     printer.cfg.example  plantilla del mutable, con las semillas de
+                        control/PID y z_offset
      firmware/          binario del MCU y su build config
 ```
 
@@ -74,8 +77,37 @@ La solución es invertir cuál es el archivo mutable:
    [include limits.cfg]         |  versionados, modo 0444,
    [include mainsail.cfg]       |  los escribe Ansible
    [include macros.cfg]        /
-   #*# SAVE_CONFIG ...         <- Klipper es dueño de esta cola
+
+   [extruder]  control + PID    <- semillas de lo que Klipper calibra:
+   [heater_bed] control + PID      tienen que estar ACA, no en un include
+   [bltouch]   z_offset
+
+   #*# SAVE_CONFIG ...          <- Klipper es dueño de esta cola
 ```
+
+### Por qué las semillas no pueden vivir en un include
+
+Esto no es una preferencia de organización, es una regla de Klipper que
+descubrimos de la peor manera:
+
+```
+SAVE_CONFIG section 'extruder' option 'control' conflicts with included value
+```
+
+**`SAVE_CONFIG` puede pisar un valor que esté en `printer.cfg`, pero se niega a
+pisar uno que venga de un `[include]`.** De `printer.cfg` sabe borrarlo antes de
+reescribirlo; de un include no puede, y en vez de dejar dos definiciones
+contradictorias, aborta. El resultado es que un `PID_CALIBRATE` o un
+`PROBE_CALIBRATE` quedan imposibles de guardar, y peor: mientras haya un valor
+pendiente, `SAVE_CONFIG` falla **para todo**, así que tampoco podés guardar la
+malla.
+
+Por eso `hardware.cfg` no tiene `control`, `pid_*` ni `z_offset`. Sí tiene
+`x_offset` e `y_offset` del BLTouch, que son la posición física del probe en el
+carro y no una calibración.
+
+La malla es la excepción y no necesita semilla: `[bed_mesh default]` es una
+sección que no existe en ningún include, así que no hay conflicto que resolver.
 
 `mainsail.cfg` no está en este repo a propósito: en la Pi es un symlink a
 `~/mainsail-config/mainsail.cfg`, el checkout upstream que mantiene el
@@ -106,6 +138,107 @@ Para hacer rollback a una versión anterior sin tocar el repo:
 ansible-playbook playbooks/printers.yml -l ndelucca-raspberry-printer \
   --tags klipper_config -e klipper_config_version=v2
 ```
+
+## Calibrar la máquina
+
+Hay tres cosas que solo se pueden medir con la impresora delante: los PID de los
+dos calentadores, el `z_offset` del probe y la malla de cama. Klipper las mide y
+las guarda **en la Pi**, en el bloque `SAVE_CONFIG` de `printer.cfg`.
+
+**Ese resultado no vuelve solo al repositorio.** `printer.cfg` no está
+versionado y el rol de Ansible lo crea una única vez (`force: false`), así que si
+algún día reinstalás la Pi, el archivo se recrea desde `printer.cfg.example` con
+las semillas viejas y **la calibración se pierde**. Por eso cada calibración
+tiene un paso final que no es opcional: traer el número al repo.
+
+```
+  MAQUINA                                      REPO
+  ───────                                      ────
+  CALIBRAR_PID_NOZZLE                          versions/v3/
+  CALIBRAR_PID_CAMA        SAVE_CONFIG           printer.cfg.example
+  PROBE_CALIBRATE          escribe en   ──▶      (las semillas)
+  BED_MESH_CALIBRATE       printer.cfg
+                           en la Pi              ▲
+                                                 │
+                                    copiar a mano y commitear
+```
+
+La malla es la única excepción: son 36 números que cambian cada vez que tocás
+los tornillos, no tiene sentido versionarla. Vive solo en la Pi y se rehace
+cuando hace falta.
+
+### El orden
+
+Importa: el PID va **antes** que la malla. Si la temperatura oscila 2-3 °C
+mientras sondeás, la cama se dilata y se contrae debajo del probe y esa
+oscilación queda dentro de la malla.
+
+```
+ 1.  CALIBRAR_PID_NOZZLE            ~5 min    pitido -> SAVE_CONFIG -> M107
+ 2.  CALIBRAR_PID_CAMA             ~10 min    pitido -> SAVE_CONFIG
+ 3.  PROBE_CALIBRATE                          TESTZ Z=-0.05 ... ACCEPT
+                                              -> SAVE_CONFIG
+ 4.  M140 S60 / M104 S150 / esperar 10 min
+     BED_MESH_CALIBRATE                       -> SAVE_CONFIG
+ 5.  llevar 1, 2 y 3 al repositorio           <- el paso que se olvida
+```
+
+Los dos macros de PID avisan solos cuando terminan: mensaje en la consola y dos
+pitidos por el beeper. No hay que quedarse mirando.
+
+**El paso 4 va en caliente y con soak de verdad.** `BED_MESH_CALIBRATE` sondea
+la cama a la temperatura que tenga en ese momento, y una cama a 60 °C no tiene
+la misma forma que fría. Los 10 minutos de espera tampoco son capricho: el
+sensor está pegado abajo y marca 60 mucho antes de que el aluminio llegue al
+equilibrio. Sondear a los 30 segundos mide una cama a mitad de camino.
+
+### El paso 5, en concreto
+
+Después de cada `SAVE_CONFIG`, Klipper deja los valores nuevos al final de
+`printer.cfg` en la Pi. Se leen desde el editor de Mainsail o por ssh:
+
+```sh
+ssh <la-pi> 'tail -40 ~/printer_data/config/printer.cfg'
+```
+
+Vas a ver algo así:
+
+```
+#*# <---------------------- SAVE_CONFIG ---------------------->
+#*# [extruder]
+#*# control = pid
+#*# pid_kp = 27.091
+#*# pid_ki = 2.544
+#*# pid_kd = 72.130
+#*#
+#*# [bltouch]
+#*# z_offset = 3.420
+```
+
+Esos números van a `versions/v3/printer.cfg.example`, en el bloque de semillas,
+respetando el nombre en mayúsculas que usa la config normal (`pid_Kp`, no
+`pid_kp`):
+
+```sh
+$EDITOR versions/v3/printer.cfg.example
+git commit -am "Update the PID seeds from the calibration of <fecha>"
+git push
+```
+
+No hace falta desplegar: `printer.cfg` ya está creado en la Pi y el rol no lo
+vuelve a tocar. El commit es para que **la próxima** Pi arranque de un número
+medido y no de uno de fábrica.
+
+### Cuándo rehacer cada una
+
+```
+ PID nozzle    si cambiás el hotend, el calentador o el termistor
+ PID cama      si cambiás la cama o el termistor
+ z_offset      si cambiás el probe, la chapa, o al nivelar la cama
+ malla         cada vez que tocás los tornillos, o cada varios meses
+```
+
+---
 
 ## La mitad de OrcaSlicer
 
@@ -184,9 +317,10 @@ En orden de impacto. El detalle de cada uno está en la sección 8 de
 - **Pressure advance sin calibrar fino.** Los valores de `variable_pa` son
   conservadores y típicos de un direct drive. El óptimo real de cada rollo sale
   de Calibration -> Pressure Advance en OrcaSlicer.
-- **PID con los valores de fábrica.** El macro `CALIBRAR_PID` los mide a
-  temperatura real de trabajo. El resultado queda en `SAVE_CONFIG`, igual que el
-  `z_offset` y la malla.
+- **PID con los valores de fábrica.** `CALIBRAR_PID_NOZZLE` y
+  `CALIBRAR_PID_CAMA` los miden a temperatura real de trabajo. Ver
+  [Calibrar la máquina](#calibrar-la-máquina), incluido el paso de traer el
+  resultado al repo.
 - **Compensaciones dimensionales sin medir.** `xy_hole_compensation` en 0 y
   `elefant_foot_compensation` en 0.15 son genéricos. Están así a propósito: una
   compensación mal puesta se aplica a todos los agujeros de todas las piezas.

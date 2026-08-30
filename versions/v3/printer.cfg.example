@@ -25,3 +25,46 @@
 # [include timelapse.cfg]
 
 [include macros.cfg]
+
+
+# ---------------------------------------------------------------------------
+# LO QUE KLIPPER CALIBRA SOLO
+# ---------------------------------------------------------------------------
+# Esto tiene que estar en ESTE archivo y no en un include, por una regla de
+# Klipper: SAVE_CONFIG se niega a pisar un valor que venga de un [include] y
+# aborta con "section 'X' option 'Y' conflicts with included value". De
+# printer.cfg si lo sabe borrar, asi que de aca si puede.
+#
+# Los valores de abajo son solo la SEMILLA con la que arranca una maquina
+# nueva. En cuanto corras PID_CALIBRATE o PROBE_CALIBRATE y guardes, el bloque
+# SAVE_CONFIG del final los pisa y estos quedan de adorno.
+#
+# La malla no esta aca porque no la necesita: [bed_mesh default] es una seccion
+# que no existe en ningun include, asi que SAVE_CONFIG la escribe sin conflicto.
+#
+#   CALIBRAR_PID_NOZZLE   -> pitido -> SAVE_CONFIG -> M107
+#   CALIBRAR_PID_CAMA     -> pitido -> SAVE_CONFIG
+#   PROBE_CALIBRATE       -> TESTZ Z=-0.05 ... -> ACCEPT -> SAVE_CONFIG
+
+# MEDIDO en esta maquina el 2026-08-30 con CALIBRAR_PID_NOZZLE: 215 grados y
+# el ventilador de pieza a full, que es el peor caso termico y la condicion
+# real de una pared exterior de PLA.
+[extruder]
+control: pid
+pid_Kp: 27.091
+pid_Ki: 2.544
+pid_Kd: 72.130
+
+# SIN MEDIR: estos siguen siendo los de fabrica del config de Klipper para esta
+# placa. Correr CALIBRAR_PID_CAMA y traer el resultado aca.
+[heater_bed]
+control: pid
+pid_Kp: 71.867
+pid_Ki: 1.536
+pid_Kd: 840.843
+
+# SIN MEDIR con la referencia nueva: este valor es de antes de que START_PRINT
+# homeara en caliente y de que la malla se anclara en zero_reference_position.
+# Correr PROBE_CALIBRATE y traer el resultado aca.
+[bltouch]
+z_offset: 3.555
