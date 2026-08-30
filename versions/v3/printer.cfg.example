@@ -55,16 +55,32 @@ pid_Kp: 27.091
 pid_Ki: 2.544
 pid_Kd: 72.130
 
-# SIN MEDIR: estos siguen siendo los de fabrica del config de Klipper para esta
-# placa. Correr CALIBRAR_PID_CAMA y traer el resultado aca.
+# MEDIDO en esta maquina el 2026-08-30 con CALIBRAR_PID_CAMA a 60 grados.
+# Los de fabrica eran 71.867 / 1.536 / 840.843: la cama real resulto bastante
+# mas lenta y mas inercial de lo que asumia ese perfil (Kd casi 50% mas alto,
+# Ki la mitad), que es justo lo que se espera de una chapa de aluminio con PEI
+# encima y un calentador de cama entera.
 [heater_bed]
 control: pid
-pid_Kp: 71.867
-pid_Ki: 1.536
-pid_Kd: 840.843
+pid_Kp: 64.636
+pid_Ki: 0.830
+pid_Kd: 1257.970
 
-# SIN MEDIR con la referencia nueva: este valor es de antes de que START_PRINT
-# homeara en caliente y de que la malla se anclara en zero_reference_position.
-# Correr PROBE_CALIBRATE y traer el resultado aca.
+# MEDIDO, y se conserva a proposito. Viene de una calibracion anterior al
+# re-home en caliente de START_PRINT, pero el cambio real es chico: antes el
+# G28 pasaba con el nozzle a 150 y ahora a 215, o sea 65 K sobre unos 30 mm de
+# acero = 30 x 65 x 12e-6 ~ 0.023 mm, en direccion de quedar un pelin mas cerca
+# de la cama. Eso esta dentro del error del propio metodo del papel, que la doc
+# de Klipper estima en 0.05-0.1 mm: rehacerlo no daba un numero mejor, daba uno
+# distinto con la misma incertidumbre.
+#
+# El otro cambio, zero_reference_position, ya esta contemplado: la malla se
+# recalibro despues de ponerlo, asi que Klipper sondeo 110,110 y normalizo todo
+# contra ese punto.
+#
+# Si alguna vez la primera capa sale sistematicamente aplastada o despegada, el
+# ajuste correcto es babystepear hasta que quede bien y despues promoverlo con
+# Z_OFFSET_APPLY_PROBE + SAVE_CONFIG. Un babystep suelto no sobrevive:
+# START_PRINT hace SET_GCODE_OFFSET Z=0 en cada impresion.
 [bltouch]
 z_offset: 3.555
