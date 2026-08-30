@@ -70,6 +70,48 @@ def _print_accels(p: Process) -> dict[str, float]:
     return {k: v for k, v in _accels(p).items() if k not in TRAVEL_ACCEL_KEYS}
 
 
+# Ejes que un G0/G1 puede mover y que tienen límites declarados en Klipper.
+MOVE_AXES = ("X", "Y", "Z")
+
+
+def _macro_moves(body: str) -> list[tuple[str, float]]:
+    """(eje, coordenada absoluta) de cada G0/G1 del cuerpo de un macro.
+
+    Se saltean dos cosas, y las dos a propósito:
+
+      - Los movimientos en modo relativo. Después de un G91 un `G1 X5` es un
+        desplazamiento, no una posición, y no hay contra qué contrastarlo sin
+        saber dónde estaba el carro. END_PRINT usa G91 para el retraction y el
+        wipe, y vuelve a G90 antes de presentar la pieza.
+      - Los valores interpolados por Jinja (`G1 Z{LAYER}`), que no se pueden
+        resolver sin ejecutar el macro.
+
+    Lo que queda son las coordenadas absolutas literales, que es exactamente
+    donde estuvo el bug que esto existe para atrapar: la línea de purga en X=2,
+    fuera de la malla, y después en X=25, comiéndose el borde de la bandeja.
+    """
+    out: list[tuple[str, float]] = []
+    absolute = True
+    for raw in body.splitlines():
+        line = raw.split(";")[0].strip().upper()
+        if not line:
+            continue
+        word = line.split()[0]
+        if word == "G90":
+            absolute = True
+            continue
+        if word == "G91":
+            absolute = False
+            continue
+        if word not in ("G0", "G1") or not absolute:
+            continue
+        for token in line.split()[1:]:
+            axis, value = token[:1], token[1:]
+            if axis in MOVE_AXES and (v := values.num(value)) is not None:
+                out.append((axis, v))
+    return out
+
+
 def _area(printable_area: tuple[str, ...] | None) -> tuple[float | None, float | None]:
     """Ancho y largo máximos de un printable_area tipo ("0x0", "250x0", ...)."""
     xs: list[float] = []
@@ -249,7 +291,8 @@ def _thermal(r: Report, cfg: Config) -> None:
 
 
 def _features(r: Report, m: Machine, cfg: Config,
-              macros: dict[str, dict[str, str]]) -> str | None:
+              macros: dict[str, dict[str, str]],
+              moonraker: Config | None) -> str | None:
     """Valida las features cruzadas. Devuelve el nombre del macro de arranque."""
     r.section("4. FEATURES")
     if "exclude_object" in cfg:
@@ -288,6 +331,22 @@ def _features(r: Report, m: Machine, cfg: Config,
                f"(usa el default)")
     else:
         r.ok(f"parámetros de {start}", ", ".join(sorted(params)))
+
+    # Moonraker implementa la API de OctoPrint via [octoprint_compat], y el
+    # perfil de impresora declara host_type: octoprint porque Orca no tiene un
+    # tipo "moonraker". Sin esa sección, todo lo demás valida y el botón de
+    # enviar a la impresora simplemente no anda, sin que nada lo explique.
+    if (m.host_type or "").lower() == "octoprint":
+        if moonraker is None:
+            r.warn("host_type octoprint vs [octoprint_compat]",
+                   "no hay moonraker.conf en esta versión: sin verificar")
+        elif "octoprint_compat" in moonraker:
+            r.ok("host_type octoprint vs [octoprint_compat]",
+                 "moonraker.conf lo declara")
+        else:
+            r.fail("host_type octoprint vs [octoprint_compat]",
+                   "el perfil habla OctoPrint pero moonraker.conf no declara "
+                   "[octoprint_compat]")
 
     end, _ = _call(m.machine_end_gcode)
     if end in macros:
@@ -406,6 +465,77 @@ def _input_shaper(r: Report, cfg: Config) -> None:
                  f"techo de ringing {RINGING_ACCEL}")
 
 
+def _macro_geometry(r: Report, cfg: Config,
+                    macros: dict[str, dict[str, str]],
+                    names: tuple[str, ...]) -> None:
+    """Que ningún movimiento absoluto de los macros se salga del recorrido.
+
+    Klipper rechaza el movimiento en tiempo de ejecución con "Move out of
+    range", o sea a mitad de una impresión y con el plástico ya puesto. Acá
+    cuesta nada y falla antes de desplegar.
+    """
+    r.section("7. GEOMETRIA DE LOS MACROS")
+    limits: dict[str, tuple[float | None, float | None]] = {}
+    for axis in MOVE_AXES:
+        stepper = cfg.get(f"stepper_{axis.lower()}", {})
+        # position_min no se declara si es 0, que es el default de Klipper.
+        limits[axis] = (values.num(stepper.get("position_min"), 0.0),
+                        values.num(stepper.get("position_max")))
+
+    for name in names:
+        if name not in macros:
+            continue
+        moves = _macro_moves(macros[name].get("gcode", ""))
+        if not moves:
+            r.warn(f"movimientos de {name}",
+                   "no hay ninguna coordenada absoluta literal que revisar")
+            continue
+        over = []
+        for axis, value in moves:
+            low, high = limits[axis]
+            if low is not None and value < low - 1e-9:
+                over.append(f"{axis}{value:g} < position_min {low:g}")
+            elif high is not None and value > high + 1e-9:
+                over.append(f"{axis}{value:g} > position_max {high:g}")
+        if over:
+            r.fail(f"movimientos de {name}", ", ".join(sorted(set(over))))
+        else:
+            r.ok(f"movimientos de {name}",
+                 f"{len(moves)} coordenadas, todas dentro del recorrido")
+
+
+def _process_coherence(r: Report) -> None:
+    """Invariantes internas de los procesos, que no dependen de la máquina.
+
+    Viven acá y no en `audit.py` por una razón práctica: audit necesita
+    OrcaSlicer instalado para resolver la herencia, así que no corre en CI.
+    Esto sí, y es donde tiene que fallar.
+    """
+    r.section("8. COHERENCIA INTERNA DE LOS PROCESOS")
+    for p in profiles.PROCESSES:
+        height = values.num(p.layer_height)
+        if height is None or height <= 0:
+            r.fail(f"altura de capa de {p.name}", "ausente o no numérica")
+            continue
+        for key in ("support_top_z_distance", "support_bottom_z_distance"):
+            gap = values.num(getattr(p, key))
+            if gap is None:
+                r.warn(f"{key} de {p.name}", "no declarado: lo hereda")
+                continue
+            # El hueco tiene que ser un número entero de capas de aire. Orca
+            # redondea al múltiplo más cercano, así que un valor que no lo sea
+            # produce un hueco distinto del declarado y nadie se entera.
+            capas = gap / height
+            if gap == 0 or abs(capas - round(capas)) < 1e-6:
+                r.ok(f"{key} de {p.name}",
+                     f"{gap:g} = {round(capas):g} capa"
+                     f"{'s' if round(capas) != 1 else ''} de {height:g}")
+            else:
+                r.fail(f"{key} de {p.name}",
+                       f"{gap:g} no es multiplo de la capa {height:g}: "
+                       f"Orca lo redondea a {round(capas) * height:g}")
+
+
 def run(klipper_dir: Path | str) -> Report:
     """Contrasta los presets contra una configuración de Klipper."""
     r = Report()
@@ -423,12 +553,21 @@ def run(klipper_dir: Path | str) -> Report:
     m = profiles.MACHINE
     macros = _macros(cfg)
 
+    # moonraker.conf es opcional: no todas las versiones lo tienen, y no se
+    # mergea con lo demás porque no es configuración de Klipper.
+    moonraker_path = Path(klipper_dir) / "moonraker.conf"
+    moonraker = (klippercfg.load(moonraker_path)
+                 if moonraker_path.is_file() else None)
+
     _geometry(r, m, cfg)
     _limits(r, m, cfg)
     _thermal(r, cfg)
-    start = _features(r, m, cfg, macros)
+    start = _features(r, m, cfg, macros, moonraker)
     _pressure_advance(r, macros, start)
     _input_shaper(r, cfg)
+    end, _ = _call(m.machine_end_gcode)
+    _macro_geometry(r, cfg, macros, tuple(n for n in (start, end) if n))
+    _process_coherence(r)
 
     r.line("")
     r.line("=" * 78)

@@ -92,7 +92,7 @@
         "0"
     ],
     "machine_pause_gcode": "PAUSE",
-    "machine_start_gcode": "START_PRINT BED_TEMP=[bed_temperature_initial_layer_single] EXTRUDER_TEMP=[nozzle_temperature_initial_layer] MATERIAL=[filament_type]\n",
+    "machine_start_gcode": "START_PRINT BED_TEMP=[bed_temperature_initial_layer_single] EXTRUDER_TEMP=[nozzle_temperature_initial_layer] MATERIAL=[filament_type] LAYER=[initial_layer_print_height] SOAK=90\n",
     "max_layer_height": [
         "0.32"
     ],
@@ -165,7 +165,7 @@
         "1"
     ],
     "z_hop": [
-        "0.2"
+        "0.3"
     ],
     "z_hop_types": [
         "Auto Lift"

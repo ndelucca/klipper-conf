@@ -68,9 +68,28 @@ BASE_IDS = {
 #
 # La carga de la malla ya NO está acá: la hace START_PRINT, porque la malla es
 # de la máquina y no del laminador.
+# LAYER existe porque la linea de purga del macro se imprimia a un 0.28 fijo
+# mientras los procesos imprimen a 0.20 (0.25 en Draft). Esa linea existe para
+# juzgar la primera capa, y a 0.28 salia redondeada aunque el z_offset
+# estuviera 0.05 alto: daba una lectura optimista justo de lo que sirve para
+# diagnosticar.
+#
+# SOAK es el tiempo que START_PRINT espera despues de que M190 vuelve, antes
+# del re-home en caliente. M190 vuelve cuando el TERMISTOR toca el target, y
+# ese termistor esta pegado abajo de la chapa: es el mismo motivo por el que el
+# procedimiento de BED_MESH_CALIBRATE exige esperar antes de palpar. Sin esto,
+# la referencia de Z se toma sobre una cama a mitad de camino y despues se
+# carga una malla que si se midio en equilibrio.
+#
+# 90 s cubre PLA y PETG. El ABS quiere bastante mas; cuando haga falta por
+# material, Orca acepta el ternario de PrusaSlicer y esto pasa a ser
+# SOAK={filament_type[0]=="ABS"?480:90} sin espacios, para que `check` lo siga
+# leyendo como un solo parametro.
 START = ("START_PRINT BED_TEMP=[bed_temperature_initial_layer_single] "
          "EXTRUDER_TEMP=[nozzle_temperature_initial_layer] "
-         "MATERIAL=[filament_type]\n")
+         "MATERIAL=[filament_type] "
+         "LAYER=[initial_layer_print_height] "
+         "SOAK=90\n")
 
 MACHINE = Machine(
     name=PRINTER,
@@ -147,7 +166,13 @@ MACHINE = Machine(
     retract_when_changing_layer=("1",),
     wipe=("1",),
     wipe_distance=("1",),
-    z_hop=("0.2",),
+    # 0.3 y no 0.2. Auto Lift solo levanta al pasar por encima de lo ya
+    # impreso, y 0.2 mm es menos despeje que un blob o que un borde levantado
+    # -y slowdown_for_curled_perimeters esta en 1, o sea que el perfil ya
+    # asume que hay perimetros que se curvan-. Con max_z_velocity en 10 mm/s
+    # el costo en tiempo es despreciable, y el modo de falla que evita
+    # -enganchar la pieza y despegarla- se lleva la impresion entera.
+    z_hop=("0.3",),
     z_hop_types=("Auto Lift",),
 
     # Previews en Mainsail / Fluidd
@@ -334,8 +359,14 @@ COMMON = Process(
     support_type="normal(auto)",
     support_style="default",
     support_threshold_angle="30",
-    support_top_z_distance="0.2",
-    support_bottom_z_distance="0.2",
+    # support_top_z_distance y support_bottom_z_distance NO estan aca: son de
+    # los pocos valores que dependen de la altura de capa y por lo tanto no
+    # pueden ser comunes. Orca redondea el hueco al multiplo de layer_height
+    # mas cercano, asi que un 0.2 unico daba 0.24 en Fine (0.12) y 0.28 en
+    # Draft (0.28): tres huecos distintos donde el perfil declaraba uno.
+    # El hueco tiene que ser UNA capa exacta de aire, que es el compromiso
+    # entre que el soporte se despegue y que la superficie salga limpia.
+    # `orca.py check` valida que sea multiplo entero de la altura de capa.
     support_object_xy_distance="0.35",
     support_base_pattern="rectilinear",
     support_base_pattern_spacing="2.5",
@@ -404,6 +435,11 @@ FINE = replace(
     bottom_shell_thickness="0.6",
     sparse_infill_density="15%",
     reduce_crossing_wall="1",
+    # Dos capas de 0.12. Una sola (0.12) no deja aire suficiente para separar
+    # el soporte de la pieza; es el unico proceso donde el hueco no es una
+    # capa, y es porque la capa es la mitad de fina que en el resto.
+    support_top_z_distance="0.24",
+    support_bottom_z_distance="0.24",
     # Planchado de la cara superior. Es la mitad que faltaba: monotonicline
     # ordena las pasadas y only_one_wall_top saca la costura del medio, pero
     # entre linea y linea sigue quedando el valle del propio cordon. El
@@ -476,12 +512,28 @@ STANDARD = replace(
     overhang_2_4_speed="40",
     overhang_3_4_speed="22",
     overhang_4_4_speed="10",
-    wall_loops="2",
+    # TRES paredes y no dos. Dos es el default de la industria, y es una
+    # eleccion de VELOCIDAD: con 2, la pared exterior se deposita contra el
+    # relleno al 15%, o sea contra aire la mayor parte del recorrido. Con 3
+    # queda apoyada contra material solido, que es lo que decide la precision
+    # dimensional y el comportamiento en voladizo.
+    #
+    # Y es lo que habilita la linea de abajo: inner-outer-inner necesita 3
+    # paredes o mas para significar algo. Con 2 degeneraba al orden normal, y
+    # por eso hasta ahora vivia solo en Strong.
+    #
+    # Cuesta del orden de 15-20% de tiempo en piezas de pared fina. Es el
+    # proceso de todos los dias y el criterio declarado es calidad primero.
+    wall_loops="3",
+    wall_sequence="inner-outer-inner wall",
     top_shell_layers="4",
     top_shell_thickness="0.8",
     bottom_shell_layers="3",
     bottom_shell_thickness="0.6",
     sparse_infill_density="15%",
+    # Una capa de 0.2 de aire.
+    support_top_z_distance="0.2",
+    support_bottom_z_distance="0.2",
     # Planchado de la cara superior. Es la mitad que faltaba: monotonicline
     # ordena las pasadas y only_one_wall_top saca la costura del medio, pero
     # entre linea y linea sigue quedando el valle del propio cordon. El
@@ -543,6 +595,9 @@ STRONG = replace(
     bottom_shell_layers="4",
     bottom_shell_thickness="0.8",
     sparse_infill_density="40%",
+    # Una capa de 0.2 de aire.
+    support_top_z_distance="0.2",
+    support_bottom_z_distance="0.2",
     # Se aparta del gyroid de COMMON a proposito. Al 40% gyroid se vuelve
     # denso y lento sin dar nada a cambio: su ventaja es la continuidad de la
     # trayectoria, que a esa densidad ya no se nota. Cubic apila celdas en las
@@ -561,9 +616,10 @@ STRONG = replace(
 
     # inner-outer-inner necesita 3 paredes o mas para significar algo: deposita
     # la exterior apoyada contra material ya solido de los dos lados, lo que
-    # mejora precision y voladizos. Con wall_loops 2 (Fine, Standard, Draft) no
-    # hay tercera pared y el modo degenera al orden normal, asi que va solo
-    # aca, donde hay 4.
+    # mejora precision y voladizos. Con wall_loops 2 no hay tercera pared y el
+    # modo degenera al orden normal, asi que vive en los procesos que tienen
+    # 3 o mas: aca (4) y Standard (3, y por herencia el de ABS). Fine y Draft
+    # se quedan con 2 y por lo tanto con el orden normal.
     wall_sequence="inner-outer-inner wall",
 )
 
@@ -605,6 +661,9 @@ DRAFT = replace(
     bottom_shell_layers="2",
     bottom_shell_thickness="0.56",
     sparse_infill_density="10%",
+    # Una capa de 0.28 de aire.
+    support_top_z_distance="0.28",
+    support_bottom_z_distance="0.28",
     # infill_combination se queda en 0 (el valor de COMMON). Estaba en 1 y no
     # hacia nada: combinar dos capas de 0.28 da 0.56 mm de altura, mas que el
     # diametro del nozzle, asi que Orca no combina. Solo tendria efecto en un
@@ -638,6 +697,13 @@ ABS_PROC = replace(
     # porque un brim interno no aporta nada ahi y complica despegar la pieza.
     brim_type="outer_only",
     brim_width="8",
+    # SIN PLANCHADO, aunque Standard lo tenga. Se heredaba sin querer, y es el
+    # material donde peor se porta: con el ventilador entre 0 y 15% la cara
+    # superior no esta rigida cuando el nozzle vuelve a pasarle por encima, asi
+    # que arrastra material en vez de fundir el valle entre cordones y deja
+    # marcas. Y son minutos extra con el nozzle merodeando sobre la pieza:
+    # sin encerramiento, cada minuto de mas es mas gradiente termico.
+    ironing_type="no ironing",
     # La pared de sacrificio que rodea la pieza. No calienta el aire, pero
     # corta la corriente: sin encerramiento, la mayor parte del gradiente que
     # delamina viene de aire moviendose, no de temperatura ambiente baja.

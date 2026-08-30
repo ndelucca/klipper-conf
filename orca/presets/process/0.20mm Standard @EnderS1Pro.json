@@ -140,7 +140,8 @@
     "type": "process",
     "version": "2.4.0.1",
     "wall_generator": "arachne",
-    "wall_loops": "2",
+    "wall_loops": "3",
+    "wall_sequence": "inner-outer-inner wall",
     "wipe_speed": "80%",
     "xy_contour_compensation": "0",
     "xy_hole_compensation": "0"

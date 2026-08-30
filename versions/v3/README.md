@@ -16,7 +16,9 @@ Klipper escribe solo.
 
  hardware.cfg         pines, sensores, PID, offsets, geometria, nivelacion, buzzer
  limits.cfg           [printer] [gcode_arcs] [exclude_object] [idle_timeout]
- macros.cfg           START_PRINT / END_PRINT / M0 / m300
+ macros.cfg           START_PRINT / END_PRINT / M0 / m300 / CALIBRAR_*
+ moonraker.conf       la tercera mitad. Referencia versionada, todavia NO
+                      la despliega el rol de Ansible
 ```
 
 El criterio del corte: **`limits.cfg` es todo lo que tiene un espejo del lado de
@@ -55,6 +57,23 @@ se migró byte a byte desde v2, verificado clave por clave.
 Los cuatro tornillos son alcanzables por el probe: el caso apretado es el
 derecho en X=195, que exige el nozzle en 195+48 = 243 contra un `position_max`
 de 250. Entra, pero sin margen.
+
+### La tanda siguiente
+
+| Qué | Antes | Ahora | Por qué |
+|---|---|---|---|
+| `minimum_cruise_ratio` | ausente, o sea `0.5` | `0` | Es la otra mitad del argumento de `max_accel`. Klipper baja la aceleración para garantizar un 50 % de crucero, así que un movimiento sólo acelera durante el **25 %** de su largo y la velocidad pico va como `√(a·(1−r)·D)`: el default cuesta exactamente lo mismo que dividir `max_accel` por dos. La cuenta de la fila de arriba estaba subestimada: la distancia real para tocar 250 mm/s es `v²/(a·(1−r))`, o sea 62.5 mm con `a=2000` y 41.7 con `a=3000`, no 15.6 y 10.4 |
+| `[gcode_arcs] resolution` | `0.1` | `0.2` | La sagita de un segmento de largo L sobre radio R es `L²/(8R)`. En el peor caso realista (un agujero de 2 mm, R=1) `0.1` daba 0.0013 mm, unas 80 veces más fino de lo que esta máquina posiciona, a cambio de 1100 segmentos por segundo que paga el planificador de Klipper en una Pi 3B+ |
+| `[idle_timeout]` | apagaba siempre | guarda de pausa | El estado de `idle_timeout` no distingue ocioso de pausado. Una impresión pausada sola por el sensor de filamento perdía calentadores y, con el `M84`, la posición: el `RESUME` posterior imprime en el lugar equivocado |
+| `[bltouch]` | `samples: 2`, tol. 0.0125 | `samples: 3`, tol. 0.025, `speed` / `lift_speed` | Con **dos** muestras la mediana *es* el promedio y no descarta el outlier: toda la protección quedaba en una tolerancia de 12.5 µm, que es más o menos la repetibilidad del propio CR-Touch. Con 81 puntos bastaba que uno fallara sus 4 intentos para abortar los otros ochenta. Y la subida del probe no mide nada: no tiene por qué ir a 5 mm/s |
+| `[safe_z_home] z_hop_speed` | `5` | `10` | El suelto que quedó del `max_z_velocity` viejo. Se paga en cada `G28`, dos por impresión |
+| Malla de cama | una sola, a 60 °C | `pla` / `petg` / `abs` | Aluminio con PEI cambia de forma decenas de micras entre 20 y 60, y otro tanto entre 60 y 100. El ABS —el material que más depende de la primera capa— imprimía sobre una malla medida 40 K más abajo. Son secciones `[bed_mesh NOMBRE]` que no existen en ningún include, así que `SAVE_CONFIG` las escribe sin conflicto, igual que `default` |
+| `START_PRINT` | `M104` final antes del `M190` | `M190`, soak, y recién ahí el nozzle | El nozzle llegaba a temperatura en 30 s y se quedaba chorreando los 2-10 minutos que tarda la cama. No se ganaba tiempo, porque la cama siempre tarda más |
+| `START_PRINT` | sin soak | `SOAK`, default 90 s | `M190` vuelve cuando el **termistor** toca el target, y está pegado abajo de la chapa. El `G28 Z` en caliente referenciaba sobre una cama a mitad de camino y después cargaba una malla que sí se midió en equilibrio |
+| Purga | `Z0.28` fijo | `Z{LAYER}` | La línea existe para juzgar la primera capa y se imprimía un 40 % más alta que ella: daba una lectura optimista de lo único que sirve para diagnosticarla |
+| `CALIBRAR_EXTRUSOR` | no existía | macro nuevo | `rotation_distance` sigue en `26.359`, el valor genérico de Klipper para esta placa. Max Flowrate y Flow Rate miden encima de él |
+| `CALIBRAR_PID_NOZZLE` | sin nota | documenta el caso ABS | El PID medido con el fan al 100 % tiene ganancia alta, y el ABS imprime con el fan casi apagado. Es una elección —gana el PLA— y ahora está escrita como tal |
+| `moonraker.conf` | fuera del repo | `versions/v3/` | Es la pieza que conecta las dos mitades: `[octoprint_compat]` es lo único que hace funcionar el `host_type: octoprint` del perfil de Orca, y `check` ahora valida ese par |
 
 ## Firmware del MCU
 

@@ -49,6 +49,17 @@
 # MEDIDO en esta maquina el 2026-08-30 con CALIBRAR_PID_NOZZLE: 215 grados y
 # el ventilador de pieza a full, que es el peor caso termico y la condicion
 # real de una pared exterior de PLA.
+#
+# ES UNA ELECCION, NO UN OLVIDO: un PID sintonizado contra una perturbacion
+# fuerte tiene ganancia alta, y el ABS imprime con el ventilador entre 0 y 15%
+# (las primeras tres capas, en 0). Ese mismo lazo sobreactua sin la
+# perturbacion y puede dar overshoot de varios grados justo en las capas que
+# deciden si la pieza se pega. Klipper tiene UN PID por calentador y el
+# material de todos los dias es el PLA, asi que gana el PLA.
+#
+# Si el ABS muestra ese overshoot, la medicion para ese caso es M106 S38 (15%)
+# + CALIBRAR_PID_NOZZLE TARGET=255. Los dos juegos no pueden coexistir: hay
+# que elegir cual se guarda.
 [extruder]
 control: pid
 pid_Kp: 27.091

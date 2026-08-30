@@ -79,7 +79,7 @@ Leído directamente de `printer.cfg` y `macros.cfg` vía la API de Moonraker.
 ```
 
 El módulo `[exclude_object]` está presente y el perfil lo aprovecha.
-`[gcode_arcs]` también, y desde `versions/v3` declara `resolution: 0.1`, que es lo
+`[gcode_arcs]` también, y desde `versions/v3` declara `resolution: 0.2`, que es lo
 que hace seguro el arc fitting. Con el default de 1 mm quedaban facetas visibles
 en los radios chicos.
 
@@ -233,7 +233,7 @@ se emiten como `M204`, que Klipper acepta sin problema.
 | Velocidad de retracción | 35 mm/s |
 | Velocidad de reinserción | 30 mm/s |
 | Desplazamiento mínimo | 2 mm |
-| Z hop | 0.2 mm, tipo Auto Lift |
+| Z hop | 0.3 mm, tipo Auto Lift. 0.2 era menos despeje que un blob o que un borde levantado, y `slowdown_for_curled_perimeters` ya asume que los hay |
 | Wipe | activado, 1 mm, sin retracción previa |
 
 0.6 mm es lo correcto para un direct drive. El perfil viejo tenía 0.5, que
@@ -248,7 +248,7 @@ cientos de oportunidades por capa de que no lo tape.
 
 ```gcode
 ; machine_start_gcode
-START_PRINT BED_TEMP=[bed_temperature_initial_layer_single] EXTRUDER_TEMP=[nozzle_temperature_initial_layer] MATERIAL=[filament_type]
+START_PRINT BED_TEMP=[bed_temperature_initial_layer_single] EXTRUDER_TEMP=[nozzle_temperature_initial_layer] MATERIAL=[filament_type] LAYER=[initial_layer_print_height] SOAK=90
 
 ; layer_change_gcode
 ;AFTER_LAYER_CHANGE
@@ -275,11 +275,15 @@ de la máquina, no del laminador. `orca.py check` falla si nadie la carga.
 son tres parámetros, pero del otro lado el macro hace bastante más:
 
 ```
- M107 / CLEAR_PAUSE / SET_GCODE_OFFSET Z=0   higiene: el fan puede haber
+ M107 / CLEAR_PAUSE / M220 S100 / M221 S100 / SET_GCODE_OFFSET Z=0
+                                             higiene: el fan puede haber
                                              quedado soplando, el estado de
-                                             pausa puede haber sobrevivido, y
-                                             el babystep de la impresión
-                                             anterior no debe filtrarse a esta
+                                             pausa puede haber sobrevivido, los
+                                             sliders de velocidad y flujo de
+                                             Mainsail sobreviven de una
+                                             impresión a la siguiente, y el
+                                             babystep de la anterior no debe
+                                             filtrarse a esta
  TEMPERATURE_WAIT MINIMUM=150                espera por temperatura, no por
                                              reloj. Ojo: M109 S150 NO sirve,
                                              porque Klipper espera a que la
@@ -288,13 +292,40 @@ son tres parámetros, pero del otro lado el macro hace bastante más:
                                              210 se quedaría esperando a que
                                              BAJE
  G28                                         homing (Z todavía en frío)
- M190 / M109                                 espera cama y nozzle finales
+ M190                                        LA CAMA PRIMERO, SOLA. Ver abajo
+ G4 P<SOAK>                                  soak de cama. Ver abajo
+ M104 / M109                                 recién ahora el nozzle final
  G28 Z                                       RE-HOME EN CALIENTE. Ver abajo
- BED_MESH_PROFILE LOAD=default               la malla, que es de la máquina
+ BED_MESH_PROFILE LOAD=<pla|petg|abs>        la malla que corresponde a la
+                                             temperatura de cama anunciada
  SET_PRESSURE_ADVANCE                        según el MATERIAL anunciado
  G1 Z10 / G1 X8 Y10                          reposicionar ANTES de bajar
- purga en X=8                                borde de la chapa Y dentro de la malla
+ purga en X=8, a Z=<LAYER>                   borde de la chapa, dentro de la
+                                             malla, y a la altura de la primera
+                                             capa del proceso
 ```
+
+**La cama primero, sola.** El `M104` al valor final estaba antes del `M190`, y
+eso dejaba el nozzle a 215 —o a 255 en ABS— chorreando durante toda la subida de
+la cama: 2-3 minutos a 60 °C, 6-10 a 100. Se pagaba en el bulbo que la purga
+tiene que barrer, en el goteo sobre la chapa, y en minutos de PETG o ABS
+cocinándose en la zona de fusión. Y no se ganaba tiempo, porque la cama siempre
+tarda más que el nozzle: adelantar el `M104` ahorraba los ~30 s que tarda el
+bloque en subir de 150 a 215.
+
+**El soak.** `M190` vuelve cuando el **termistor** toca el target, y ese
+termistor está pegado abajo de la chapa: es exactamente el motivo por el que el
+procedimiento de `BED_MESH_CALIBRATE` exige esperar 10 minutos antes de palpar.
+Sin la espera, el `G28 Z` de abajo referencia el Z sobre una cama a mitad de
+camino y después carga una malla que **sí** se midió en equilibrio: las dos
+referencias del Z no corresponden al mismo estado térmico del aluminio. El
+default es 90 s y cubre PLA y PETG; el ABS quiere bastante más.
+
+**La altura de la purga.** Estuvo fija en `Z0.28` mientras los procesos imprimen
+la primera capa a 0.20 (0.25 en Draft). Esa línea existe para juzgar la primera
+capa, y a 0.28 salía redondeada aunque el `z_offset` estuviera 0.05 mm alto: daba
+una lectura optimista justo de lo que sirve para diagnosticar. Ahora la altura
+llega por parámetro, y `check` valida que el laminador la mande.
 
 El `G28 Z` en caliente es el que más rinde de esa lista. El primer `G28` ocurre
 con la cama a temperatura ambiente y el nozzle a 150; para cuando se imprime la
@@ -352,7 +383,7 @@ abajo está el porqué.
 | | Fine | **Standard** | Strong | Draft | ABS |
 |---|---|---|---|---|---|
 | Altura de capa | 0.12 | **0.20** | 0.20 | 0.28 | 0.20 |
-| Perímetros | 2 | **2** | 4 | 2 | 2 |
+| Perímetros | 2 | **3** | 4 | 2 | 3 |
 | Relleno | 15% gyroid | **15% gyroid** | 40% cubic | 10% gyroid | 15% gyroid |
 | Techo superior | 0.84 mm | **0.80 mm** | 1.00 mm | 0.84 mm | 0.80 mm |
 | Base | 0.60 mm | **0.60 mm** | 0.80 mm | 0.56 mm | 0.60 mm |
@@ -467,13 +498,13 @@ en una impresión de 20 minutos, sin comprar nada.
 | `seam_position` | aligned | Costura alineada en una columna |
 | `seam_slope_type` | external | **Scarf joint**: reparte el solape de la costura en una rampa de varios milímetros en vez de cortar y volver a arrancar en el mismo punto, que es lo que deja el blob. Activo en Fine, Standard y Strong; en Draft no, porque esas piezas no se miran de cerca |
 | `seam_slope_conditional` | sí | Aplica el scarf solo donde la pared es lo bastante lisa (ángulo > 155°). En una esquina viva el scarf se ve peor que la costura normal, así que ahí se abstiene |
-| `wall_sequence` | inner-outer-inner (solo Strong) | Deposita la pared exterior apoyada contra material ya sólido de los dos lados. **Necesita 3 paredes o más para significar algo**: con `wall_loops: 2` (Fine, Standard, Draft) no hay tercera pared y el modo degenera al orden normal, por eso va solo en Strong, que tiene 4 |
+| `wall_sequence` | inner-outer-inner (Standard, Strong y ABS) | Deposita la pared exterior apoyada contra material ya sólido de los dos lados. **Necesita 3 paredes o más para significar algo**: con `wall_loops: 2` (Fine y Draft) no hay tercera pared y el modo degenera al orden normal. Standard subió a 3 perímetros justamente por esto: con 2, la pared exterior se depositaba contra relleno al 15 %, o sea contra aire la mayor parte del recorrido |
 | `staggered_inner_seams` | sí | Escalona las costuras internas, no se apilan todas |
-| `enable_arc_fitting` | **sí** | Depende de que `limits.cfg` declare `[gcode_arcs] resolution: 0.1`. Con el default de Klipper (1 mm) el arco se parte en cuerdas de 1 mm y en un radio de 2 mm deja 0.064 mm de faceta; con 0.1 mm el error baja a 0.0006 mm y además el g-code es mucho más chico que emitiendo segmentos de 0.012 mm. `orca.py check` valida ese par |
+| `enable_arc_fitting` | **sí** | Depende de que `limits.cfg` declare `[gcode_arcs] resolution: 0.2`. La sagita de un segmento de largo L sobre un radio R es `L²/(8R)`, así que en el peor caso realista (un agujero de 2 mm, R=1) el default de Klipper de 1 mm deja 0.125 mm de faceta, 0.2 deja 0.005 mm y 0.1 deja 0.0013 mm. 0.1 estuvo puesto un tiempo y era ~80 veces más fino de lo que esta máquina posiciona, a cambio de 1100 segmentos por segundo que paga el planificador de Klipper en una Pi 3B+. `orca.py check` valida ese par, y 0.2 es justo el límite que acepta |
 | `exclude_object` | sí | Tu Klipper tiene `[exclude_object]`. Podés cancelar una pieza sola desde Mainsail sin abortar el plato |
 | `elefant_foot_compensation` | 0.15 mm | Compensa el aplastado de la primera capa |
 | `slowdown_for_curled_perimeters` | sí | Frena donde detecta perímetros que se levantan |
-| `ironing_type` | top (Fine y Standard) | **Planchado**: `monotonicline` ordena las pasadas de la cara superior y `only_one_wall_top` le saca la costura del medio, pero entre línea y línea sigue quedando el valle del propio cordón. El planchado lo rellena pasando el nozzle casi vacío por encima (flow 10 %, spacing 0.15, 30 mm/s). `top` y no `topmost` para planchar toda cara superior expuesta, no solo la última capa; `all solid` plancharía también las sólidas internas, que nadie ve. Cuesta tiempo **solo** en caras superiores. En Strong y Draft no va, por el mismo criterio que el scarf joint |
+| `ironing_type` | top (Fine y Standard; **no** en ABS) | **Planchado**: `monotonicline` ordena las pasadas de la cara superior y `only_one_wall_top` le saca la costura del medio, pero entre línea y línea sigue quedando el valle del propio cordón. El planchado lo rellena pasando el nozzle casi vacío por encima (flow 10 %, spacing 0.15, 30 mm/s). `top` y no `topmost` para planchar toda cara superior expuesta, no solo la última capa; `all solid` plancharía también las sólidas internas, que nadie ve. Cuesta tiempo **solo** en caras superiores. En Strong y Draft no va, por el mismo criterio que el scarf joint. Y **no** en ABS, aunque herede de Standard: con el ventilador entre 0 y 15 % la cara superior no está rígida cuando el nozzle vuelve a pasarle por encima, así que arrastra material en vez de fundir el valle |
 
 ### Anchos de línea
 
@@ -714,12 +745,18 @@ calibrar el flujo significa recalibrar el flujo.
      reemplaza a nivelarla. Y no puede: fade_end 10 la desvanece, asi que de
      Z=10 para arriba la pieza sale sobre la cama real, torcida y todo.
 
- A2. MALLA, EN CALIENTE                                   ~15 min, una vez
-     Con la cama a la temperatura a la que imprimis (60 para PLA):
-         BED_MESH_CALIBRATE
+ A2. UNA MALLA POR TEMPERATURA, EN CALIENTE               ~45 min, una vez
+         M140 S60  -> esperar 10 min -> BED_MESH_CALIBRATE PROFILE=pla
+         M140 S70  -> esperar 10 min -> BED_MESH_CALIBRATE PROFILE=petg
+         M140 S100 -> esperar 15 min -> BED_MESH_CALIBRATE PROFILE=abs
          SAVE_CONFIG
-     Son 81 puntos x 2 samples: tarda. Se paga una sola vez, porque
+     Son 81 puntos x 3 samples cada una: tarda. Se paga una sola vez, porque
      START_PRINT carga la malla guardada y no re-palpa en cada impresion.
+     START_PRINT elige el perfil segun el BED_TEMP que anuncia el laminador, y
+     si el que corresponde no existe todavia cae en 'default' y lo dice por
+     consola, en vez de abortar la impresion.
+     Una sola malla a 60 es la del PLA: el PETG (70) y sobre todo el ABS (100)
+     imprimian sobre una cama que no es la que palpo el probe.
 
      CRITERIO: el rango de la malla que reporta Klipper. Arriba de ~0.3 mm
      conviene volver a A1.
@@ -752,6 +789,27 @@ calibrar el flujo significa recalibrar el flujo.
 
      Es la medicion de mayor valor por minuto invertido de toda la lista, y es
      previa a decidir si el ADXL vale la pena.
+```
+
+```
+ A5. ROTATION_DISTANCE DEL EXTRUSOR                       ~15 min
+     Marcar el filamento a 120 mm de la entrada del extrusor, y despues:
+         CALIBRAR_EXTRUSOR
+     Extruye 100 mm a 1 mm/s (lento a proposito: a caudal alto el engranaje
+     patina y medis el patinaje, no la geometria). Al terminar, medir lo que
+     queda hasta la marca:
+         consumido = 120 - R
+         nuevo rotation_distance = 26.359 * (120 - R) / 100
+     Editar [extruder] en hardware.cfg y repetir.
+
+     CRITERIO: consumir 100 +/- 0.5 mm.
+     POR QUE ANTES DE LA FASE B: rotation_distance traduce vueltas de motor en
+     milimetros de filamento, y B1 y B2 miden encima. Si esta mal, esas dos
+     torres miden bien un numero equivocado. Y hay indicio de que lo esta: los
+     filament_flow_ratio del repo son 0.98 / 0.95 / 0.98 / 1.00, y tres de
+     cuatro por debajo de 1 sugiere un sesgo comun, o sea un error del
+     engranaje -constante de la MAQUINA- corregido cuatro veces por separado
+     en una clave de MATERIAL.
 ```
 
 ### Fase B - el material (no toca el firmware)
@@ -838,6 +896,7 @@ en 3000 para que respire el travel; lo que el shaper destraba es el
                                   ahora          post input shaper
  -----------------------------------------------------------------
  [printer] max_accel (Klipper)     3000              5000
+ minimum_cruise_ratio                 0                 0   (ya esta)
  default_acceleration              2000              4000
  inner_wall_acceleration           2000              4000
  outer_wall_acceleration            700              2500
@@ -901,7 +960,7 @@ Tres causas concretas, con su corrección:
 
 | Causa | Evidencia | Corrección |
 |---|---|---|
-| Klipper partía los arcos en cuerdas de 1 mm | `[gcode_arcs] resolution = 1.0` consultado por API. En un radio de 2 mm eso son 0.064 mm de faceta | Primero se apagó `enable_arc_fitting`. Desde `versions/v3` se arregla de raíz: `resolution: 0.1` en `limits.cfg` y el arc fitting vuelve a estar prendido |
+| Klipper partía los arcos en cuerdas de 1 mm | `[gcode_arcs] resolution = 1.0` consultado por API. En un radio de 2 mm eso son 0.064 mm de faceta | Primero se apagó `enable_arc_fitting`. Desde `versions/v3` se arregla de raíz: `resolution` en `limits.cfg` (0.1 al principio, hoy 0.2) y el arc fitting vuelve a estar prendido |
 | Pressure advance apagado | El g-code impreso tenía `enable_pressure_advance = 0` y Klipper reportaba `pressure_advance = 0.0` | Lo pone `START_PRINT` según el `MATERIAL` que anuncia el laminador, así lo hereda cualquier g-code |
 | Techo de un agujero sin soporte | El perímetro en voladizo arrancaba en el aire | `overhang_reverse` y `extra_perimeters_on_overhangs` en 1 |
 
@@ -1003,7 +1062,7 @@ directorio de datos y copiá encima `backup/20260826-original/user/`, más el
 | ABS a 255 y no 245 | Sin encerramiento el modo de falla es la delaminación, no el warp. Más calor por capa es la contramedida estándar, y el hotend llega a 300 |
 | Eje Z a 10 / 200 y no 5 / 100 | 5/100 eran los valores del archivo de ejemplo de Klipper, no de esta máquina. Con husillo TR8x8, 5 mm/s son 37 rpm |
 | Scarf joint solo en Fine, Standard y Strong | Reparte la costura en rampa. En Draft es tiempo gastado en una superficie que nadie mira |
-| `wall_sequence` solo en Strong | inner-outer-inner necesita 3 paredes o más. Con `wall_loops: 2` degenera al orden normal |
+| `wall_sequence` en los procesos de 3 paredes o más | inner-outer-inner necesita 3 para significar algo. Con `wall_loops: 2` degenera al orden normal, así que Fine y Draft se quedan afuera |
 | Malla con `fade_end: 10` | Sin fade la corrección se suma al Z en todas las capas y una pieza alta reproduce la panza de la cama entera |
 | `samples: 2` en el BLTouch y malla 9x9 | El default era UNA lectura por punto y un paso de 39x44 mm. Como `START_PRINT` carga una malla guardada en vez de re-palpar, ser más denso y más lento cuesta cero tiempo de impresión |
 | `screws_tilt_adjust` además de `bed_screws` | Había un probe y se nivelaba con un papel. La malla corrige el residuo de una cama nivelada; no la reemplaza, porque `fade_end: 10` la desvanece |

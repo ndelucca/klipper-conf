@@ -52,8 +52,10 @@ El criterio con el que está repartida la configuración:
                         NO lleva PID ni z_offset: ver "las semillas" abajo
      limits.cfg         [printer] [gcode_arcs] [exclude_object] [idle_timeout]
      macros.cfg         START_PRINT / END_PRINT / M0 / m300
-                        DESCARGAR_FILAMENTO / CALIBRAR_PID_NOZZLE
-                        CALIBRAR_PID_CAMA
+                        DESCARGAR_FILAMENTO / CALIBRAR_EXTRUSOR
+                        CALIBRAR_PID_NOZZLE / CALIBRAR_PID_CAMA
+     moonraker.conf     la tercera mitad. Referencia versionada; todavia NO
+                        la despliega el rol de Ansible
      printer.cfg.example  plantilla del mutable, con las semillas de
                         control/PID y z_offset
      firmware/          binario del MCU y su build config
@@ -163,9 +165,9 @@ tiene un paso final que no es opcional: traer el número al repo.
                                     copiar a mano y commitear
 ```
 
-La malla es la única excepción: son 36 números que cambian cada vez que tocás
-los tornillos, no tiene sentido versionarla. Vive solo en la Pi y se rehace
-cuando hace falta.
+Las mallas son la única excepción: son 81 números por perfil que cambian cada
+vez que tocás los tornillos, no tiene sentido versionarlas. Viven solo en la Pi
+y se rehacen cuando hace falta.
 
 ### El orden
 
@@ -174,23 +176,46 @@ mientras sondeás, la cama se dilata y se contrae debajo del probe y esa
 oscilación queda dentro de la malla.
 
 ```
- 1.  CALIBRAR_PID_NOZZLE            ~5 min    pitido -> SAVE_CONFIG -> M107
- 2.  CALIBRAR_PID_CAMA             ~10 min    pitido -> SAVE_CONFIG
- 3.  PROBE_CALIBRATE                          TESTZ Z=-0.05 ... ACCEPT
+ 1.  SCREWS_TILT_CALCULATE                    girar y repetir hasta 00:00-00:05
+ 2.  CALIBRAR_PID_NOZZLE            ~5 min    pitido -> SAVE_CONFIG -> M107
+ 3.  CALIBRAR_PID_CAMA             ~10 min    pitido -> SAVE_CONFIG
+ 4.  CALIBRAR_EXTRUSOR             ~2 min     marcar a 120 mm ANTES; medir y
+                                              editar rotation_distance
+ 5.  PROBE_CALIBRATE                          TESTZ Z=-0.05 ... ACCEPT
                                               -> SAVE_CONFIG
- 4.  M140 S60 / M104 S150 / esperar 10 min
-     BED_MESH_CALIBRATE                       -> SAVE_CONFIG
- 5.  llevar 1, 2 y 3 al repositorio           <- el paso que se olvida
+ 6.  UNA MALLA POR TEMPERATURA, cada una en caliente y con soak:
+       M140 S60  / esperar 10 min / BED_MESH_CALIBRATE PROFILE=pla
+       M140 S70  / esperar 10 min / BED_MESH_CALIBRATE PROFILE=petg
+       M140 S100 / esperar 15 min / BED_MESH_CALIBRATE PROFILE=abs
+                                              -> SAVE_CONFIG
+ 7.  llevar 2, 3, 4 y 5 al repositorio        <- el paso que se olvida
 ```
 
 Los dos macros de PID avisan solos cuando terminan: mensaje en la consola y dos
 pitidos por el beeper. No hay que quedarse mirando.
 
-**El paso 4 va en caliente y con soak de verdad.** `BED_MESH_CALIBRATE` sondea
-la cama a la temperatura que tenga en ese momento, y una cama a 60 °C no tiene
-la misma forma que fría. Los 10 minutos de espera tampoco son capricho: el
+**El paso 1 va primero por una razón.** La malla corrige el residuo de una cama
+nivelada; no reemplaza a nivelarla, y no puede, porque `fade_end: 10` la
+desvanece: de Z=10 para arriba la pieza sale sobre la cama real, torcida y todo.
+
+**El paso 4 va antes que cualquier calibración de caudal del laminador.**
+`rotation_distance` es la constante que traduce vueltas de motor en milímetros
+de filamento, y Max Flowrate y Flow Rate miden encima de ella. Si está mal,
+esas dos torres miden bien un número equivocado. Hoy los `filament_flow_ratio`
+del repo están en 0.98 / 0.95 / 0.98 / 1.00: tres de cuatro por debajo de 1
+sugiere un sesgo común, o sea un error del engranaje —una constante de la
+**máquina**— corregido cuatro veces por separado en una clave de **material**.
+
+**El paso 6 va en caliente, con soak, y una vez por temperatura.**
+`BED_MESH_CALIBRATE` sondea la cama a la temperatura que tenga en ese momento, y
+aluminio con PEI encima cambia de forma decenas de micras entre 20 y 60 grados,
+y otro tanto entre 60 y 100. Los 10 minutos de espera tampoco son capricho: el
 sensor está pegado abajo y marca 60 mucho antes de que el aluminio llegue al
 equilibrio. Sondear a los 30 segundos mide una cama a mitad de camino.
+
+`START_PRINT` elige el perfil según el `BED_TEMP` que anuncia el laminador, y si
+el que corresponde no existe todavía cae en `default` y lo dice por consola, en
+vez de abortar la impresión.
 
 ### El paso 5, en concreto
 
@@ -305,6 +330,12 @@ El motivo es de seguridad, no de prolijidad: una instancia de Moonraker expuesta
 suele quedar sin autenticación efectiva, y su API acepta gcode arbitrario, subida
 y borrado de archivos, y apagado. Este repo es público.
 
+El detalle concreto, que ahora está escrito en `versions/v3/moonraker.conf`:
+nginx hace proxy desde `127.0.0.1`, que cae dentro de `trusted_clients`, así que
+**todo lo que entre por la web de Mainsail entra como confiable, sin login**. La
+autenticación de Moonraker no cubre esa puerta. Hoy eso está acotado a la LAN,
+pero es la razón por la que la URL no se versiona.
+
 ## Pendiente
 
 En orden de impacto. El detalle de cada uno está en la sección 8 de
@@ -314,10 +345,17 @@ En orden de impacto. El detalle de cada uno está en la sección 8 de
   conservadora, no una medición, y el mecanismo de auto-freno de OrcaSlicer solo
   protege si ese número es real. Es lo único de esta lista que puede estar
   afectando la calidad **ahora**. Sale de Calibration -> Max Flowrate.
-- **Nivelación y malla, del lado de la máquina.** No cuestan un peso y
+- **Nivelación y mallas, del lado de la máquina.** No cuestan un peso y
   condicionan todo lo demás: nivelar con `SCREWS_TILT_CALCULATE` en vez del
-  método del papel, y recalibrar la malla **con la cama caliente** (una palpada
-  en frío corrige una cama que no existe al imprimir).
+  método del papel, y calibrar **una malla por temperatura** (`pla`, `petg`,
+  `abs`), cada una en caliente y con soak. La malla que hay hoy en la Pi es de
+  6x6 y tiene un rango de 0.33 mm, por encima del criterio de 0.3 que declara
+  la sección 8: nivelar primero no es opcional.
+- **`rotation_distance` del extrusor sin medir.** Es el escalón que faltaba
+  debajo de Max Flowrate y Flow Rate: las dos miden encima de él. `26.359` es
+  el valor del config genérico de Klipper para esta placa, y los flow ratios
+  del laminador lo están compensando en el lugar equivocado. Lo mide
+  `CALIBRAR_EXTRUSOR`.
 - **`[input_shaper]` sin calibrar.** Es el único cambio que mejora calidad y
   velocidad a la vez: lo que destraba no es la velocidad sino la *distancia de
   aceleración*. Mientras no exista, las aceleraciones de impresión se quedan en

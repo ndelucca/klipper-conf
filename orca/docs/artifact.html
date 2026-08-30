@@ -465,7 +465,7 @@ footer{
  [input_shaper]        NO CONFIGURADO
  pressure_advance      lo pone START_PRINT segun el material</pre></div>
 
-  <p><code>[exclude_object]</code> está presente y el perfil lo aprovecha. <code>[gcode_arcs]</code> también, y desde <code>versions/v3</code> declara <code>resolution: 0.1</code>, que es lo que hace seguro el arc fitting. Con el default de 1 mm quedaban facetas visibles en los radios chicos.</p>
+  <p><code>[exclude_object]</code> está presente y el perfil lo aprovecha. <code>[gcode_arcs]</code> también, y desde <code>versions/v3</code> declara <code>resolution: 0.2</code>, que es lo que hace seguro el arc fitting. Con el default de 1 mm quedaban facetas visibles en los radios chicos.</p>
 
   <p>Estas dependencias ya no se controlan a ojo: las valida <code>python orca/orca.py check</code> contra <code>versions/&lt;CURRENT&gt;/</code>, y CI las corre en cada push.</p>
 </section>
@@ -576,7 +576,7 @@ footer{
 
   <h3>G-code</h3>
   <div class="term gcode"><pre>; machine_start_gcode
-START_PRINT BED_TEMP=[bed_temperature_initial_layer_single] EXTRUDER_TEMP=[nozzle_temperature_initial_layer] MATERIAL=[filament_type]
+START_PRINT BED_TEMP=[bed_temperature_initial_layer_single] EXTRUDER_TEMP=[nozzle_temperature_initial_layer] MATERIAL=[filament_type] LAYER=[initial_layer_print_height] SOAK=90
 
 ; layer_change_gcode
 ;AFTER_LAYER_CHANGE
@@ -589,7 +589,8 @@ END_PRINT</pre></div>
   <div class="note">
     <span class="tag">MATERIAL=[filament_type]</span>
     <p>Es lo que le permite a Klipper poner el pressure advance por su cuenta: el macro tiene la tabla por material (<code>variable_pa</code>) y el laminador solo anuncia cuál está cargado. Así cualquier g-code hereda el PA correcto aunque no lo haya generado OrcaSlicer.</p>
-    <p>La carga de la malla <strong>ya no está acá</strong>. Antes el start gcode hacía <code>BED_MESH_PROFILE LOAD=default</code>, porque <code>START_PRINT</code> hace <code>G28</code> y nunca volvía a cargarla. Eso ahora lo hace el propio macro, que es donde corresponde: la malla es de la máquina, no del laminador.</p>
+    <p>La carga de la malla <strong>ya no está acá</strong>. Antes el start gcode hacía <code>BED_MESH_PROFILE LOAD=default</code>, porque <code>START_PRINT</code> hace <code>G28</code> y nunca volvía a cargarla. Eso ahora lo hace el propio macro, que es donde corresponde: la malla es de la máquina, no del laminador. Y elige entre <code>pla</code>, <code>petg</code> y <code>abs</code> según el <code>BED_TEMP</code> anunciado, porque el aluminio con PEI no tiene la misma forma a 60 que a 100.</p>
+    <p><code>LAYER</code> y <code>SOAK</code> son los dos parámetros nuevos del contrato. <code>LAYER</code> es la altura de la primera capa, y hace que la línea de purga se imprima a la altura que existe para diagnosticar en vez de a un 0.28 fijo. <code>SOAK</code> es la espera después del <code>M190</code>: ese comando vuelve cuando el termistor pegado abajo de la chapa toca el target, no cuando el aluminio está en equilibrio, así que sin la espera el re-home en caliente referencia una cama a mitad de camino.</p>
   </div>
 
   <p><code>G92 E0</code> en el cambio de capa es obligatorio: el perfil usa extrusión relativa (<code>M83</code>, que tu macro ya setea) y sin ese reset se pierde precisión de punto flotante en el acumulador de E. OrcaSlicer directamente rechaza el perfil si falta.</p>
@@ -609,7 +610,7 @@ END_PRINT</pre></div>
     <thead><tr><th></th><th class="n">Fine</th><th class="n">Standard</th><th class="n">Strong</th><th class="n">Draft</th><th class="n">ABS</th></tr></thead>
     <tbody>
       <tr><td>Altura de capa</td><td class="n">0.12</td><td class="n">0.20</td><td class="n">0.20</td><td class="n">0.28</td><td class="n">0.20</td></tr>
-      <tr><td>Perímetros</td><td class="n">2</td><td class="n">2</td><td class="n">4</td><td class="n">2</td><td class="n">2</td></tr>
+      <tr><td>Perímetros</td><td class="n">2</td><td class="n">3</td><td class="n">4</td><td class="n">2</td><td class="n">3</td></tr>
       <tr><td>Relleno</td><td class="n">15 % gyroid</td><td class="n">15 % gyroid</td><td class="n">40 % cubic</td><td class="n">10 % gyroid</td><td class="n">15 % gyroid</td></tr>
       <tr><td>Techo superior</td><td class="n">0.84 mm</td><td class="n">0.80 mm</td><td class="n">1.00 mm</td><td class="n">0.84 mm</td><td class="n">0.80 mm</td></tr>
       <tr><td>Base</td><td class="n">0.60 mm</td><td class="n">0.60 mm</td><td class="n">0.80 mm</td><td class="n">0.56 mm</td><td class="n">0.60 mm</td></tr>
@@ -674,7 +675,7 @@ END_PRINT</pre></div>
       <tr><td><code>ensure_vertical_shell_thickness</code></td><td class="n">moderate</td><td>Evita agujeros en paredes casi verticales sin inflar el tiempo</td></tr>
       <tr><td><code>seam_position</code></td><td class="n">aligned</td><td>Costura alineada en una columna</td></tr>
       <tr><td><code>staggered_inner_seams</code></td><td class="n">sí</td><td>Escalona las costuras internas, no se apilan todas</td></tr>
-      <tr><td><code>enable_arc_fitting</code></td><td class="n">sí</td><td>Depende de que <code>limits.cfg</code> declare <code>[gcode_arcs] resolution: 0.1</code>. Con el default de 1 mm el arco se parte en cuerdas de 1 mm y en un radio de 2 mm deja 0.064 mm de faceta; con 0.1 mm el error baja a 0.0006 mm y el g-code es mucho más chico que emitiendo segmentos de 0.012 mm</td></tr>
+      <tr><td><code>enable_arc_fitting</code></td><td class="n">sí</td><td>Depende de que <code>limits.cfg</code> declare <code>[gcode_arcs] resolution: 0.2</code>. La sagita de un segmento de largo L sobre radio R es <code>L²/(8R)</code>: en el peor caso realista (un agujero de 2 mm) el default de 1 mm deja 0.125 mm de faceta y 0.2 deja 0.005 mm. Estuvo en 0.1, que era ~80 veces más fino de lo que la máquina posiciona a cambio de 1100 segmentos por segundo en una Pi 3B+</td></tr>
       <tr><td><code>exclude_object</code></td><td class="n">sí</td><td>Podés cancelar una pieza sola desde Mainsail sin abortar el plato</td></tr>
       <tr><td><code>elefant_foot_compensation</code></td><td class="n">0.15 mm</td><td>Compensa el aplastado de la primera capa</td></tr>
     </tbody>
@@ -927,7 +928,7 @@ END_PRINT</pre></div>
   <div class="tblwrap"><table>
     <thead><tr><th>Causa</th><th>Evidencia</th><th>Corrección</th></tr></thead>
     <tbody>
-      <tr><td>Klipper partía los arcos en cuerdas de 1 mm</td><td><code>[gcode_arcs] resolution = 1.0</code> consultado por API. En un radio de 2 mm son 0.064 mm de faceta</td><td>Primero se apagó <code>enable_arc_fitting</code>. Desde <code>versions/v3</code> se arregla de raíz: <code>resolution: 0.1</code> en <code>limits.cfg</code> y el arc fitting vuelve a estar prendido</td></tr>
+      <tr><td>Klipper partía los arcos en cuerdas de 1 mm</td><td><code>[gcode_arcs] resolution = 1.0</code> consultado por API. En un radio de 2 mm son 0.064 mm de faceta</td><td>Primero se apagó <code>enable_arc_fitting</code>. Desde <code>versions/v3</code> se arregla de raíz: <code>resolution</code> en <code>limits.cfg</code> (0.1 al principio, hoy 0.2) y el arc fitting vuelve a estar prendido</td></tr>
       <tr><td>Pressure advance apagado</td><td>El g-code impreso tenía <code>enable_pressure_advance = 0</code> y Klipper reportaba <code>pressure_advance = 0.0</code></td><td>Lo pone <code>START_PRINT</code> según el <code>MATERIAL</code> que anuncia el laminador, así lo hereda cualquier g-code</td></tr>
       <tr><td>Techo de un agujero sin soporte</td><td>El perímetro en voladizo arrancaba en el aire</td><td><code>overhang_reverse</code> y <code>extra_perimeters_on_overhangs</code> en 1</td></tr>
     </tbody>
@@ -998,7 +999,7 @@ END_PRINT</pre></div>
       <tr><td>ABS es la única excepción, con proceso propio</td><td><code>brim_type</code> y <code>draft_shield</code> son claves de PROCESO y un filamento no las puede pisar. Sin el quinto proceso, la fuente de verdad documentaba un paso manual en la UI que <code>check</code> no podía verificar</td></tr>
       <tr><td>El proceso ABS NO baja la velocidad</td><td>Sin caja, el modo de falla es la delaminación: ir más lento le da más tiempo a la capa de abajo para enfriarse. La contramedida es más calor por capa, no menos velocidad</td></tr>
       <tr><td>Planchado solo en Fine y Standard</td><td>Es la mitad que faltaba de la cara superior, y cuesta tiempo solo ahí</td></tr>
-      <tr><td><code>samples: 2</code> en el BLTouch y malla 9×9</td><td>El default era UNA lectura por punto y un paso de 39×44 mm. Como <code>START_PRINT</code> carga una malla guardada en vez de re-palpar, ser más denso y más lento cuesta cero tiempo de impresión</td></tr>
+      <tr><td><code>samples: 3</code> en el BLTouch y malla 9×9</td><td>El default era UNA lectura por punto y un paso de 39×44 mm. Estuvo un momento en 2, pero con dos la mediana <em>es</em> el promedio y no descarta nada: hacen falta tres para que filtre. Como <code>START_PRINT</code> carga una malla guardada en vez de re-palpar, ser más denso y más lento cuesta cero tiempo de impresión</td></tr>
       <tr><td><code>screws_tilt_adjust</code> además de <code>bed_screws</code></td><td>Había un probe y se nivelaba con un papel. La malla corrige el residuo de una cama nivelada; no la reemplaza, porque <code>fade_end: 10</code> la desvanece</td></tr>
       <tr><td>Perfiles que heredan en vez de autocontenidos</td><td>Sobreviven a las actualizaciones de OrcaSlicer</td></tr>
       <tr><td><code>compatible_printers</code> en todo</td><td>Listas limpias: solo ves lo que aplica a esta impresora</td></tr>
