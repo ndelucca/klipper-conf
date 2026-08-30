@@ -173,8 +173,8 @@ MACHINE = Machine(
 # ============================================================================
 # PROCESOS
 # ============================================================================
-# ============================================================================
 # Techo de aceleracion 2000 mm/s2 = Klipper [printer] max_accel.
+# Sin input shaper la pared exterior va a 1000 mm/s2 y velocidad baja.
 COMMON = Process(
     compatible_printers=COMPAT,
 
@@ -242,6 +242,24 @@ COMMON = Process(
     internal_solid_infill_pattern="monotonicline",
     top_surface_pattern="monotonicline",
     bottom_surface_pattern="monotonic",
+
+    # Patron del relleno disperso. El argumento habitual a favor de gyroid es
+    # la isotropia, y al 10-15% de densidad eso importa poco. Lo que importa
+    # aca es otra cosa: grid SE CRUZA CONSIGO MISMO dentro de la misma capa, y
+    # en cada interseccion el nozzle pasa por encima de material ya extruido.
+    # En una bed slinger sin input shaper cada uno de esos golpes excita la
+    # resonancia justo cuando la aceleracion ya esta en el techo de 2000.
+    # Gyroid no se cruza nunca: una sola trayectoria continua por capa.
+    #
+    # El costo esta en la Pi, no en la impresora: gyroid es todo curvas, y con
+    # enable_arc_fitting=1 salen como G2/G3 que Klipper re-expande en segmentos
+    # de 0.1 mm ([gcode_arcs] resolution en limits.cfg). A 110 mm/s eso es
+    # ~1100 segmentos por segundo de trabajo para una 3B+. Si alguna vez el
+    # relleno tartamudea, el primer lugar donde mirar es subir esa resolution,
+    # no bajar la velocidad.
+    #
+    # Strong lo pisa con cubic: ver el comentario alla.
+    sparse_infill_pattern="gyroid",
     is_infill_first="0",
     reduce_infill_retraction="1",
 
@@ -364,7 +382,6 @@ FINE = replace(
     bottom_shell_layers="5",
     bottom_shell_thickness="0.6",
     sparse_infill_density="15%",
-    sparse_infill_pattern="grid",
     reduce_crossing_wall="1",
     # Scarf joint. `conditional` hace que se aplique solo donde la pared es lo
     # bastante lisa (angulo > 155 grados): en una esquina viva el scarf se ve
@@ -425,7 +442,6 @@ STANDARD = replace(
     bottom_shell_layers="3",
     bottom_shell_thickness="0.6",
     sparse_infill_density="15%",
-    sparse_infill_pattern="grid",
     # Scarf joint. `conditional` hace que se aplique solo donde la pared es lo
     # bastante lisa (angulo > 155 grados): en una esquina viva el scarf se ve
     # peor que la costura normal, asi que ahi se abstiene.
@@ -468,6 +484,11 @@ STRONG = replace(
     bottom_shell_layers="4",
     bottom_shell_thickness="0.8",
     sparse_infill_density="40%",
+    # Se aparta del gyroid de COMMON a proposito. Al 40% gyroid se vuelve
+    # denso y lento sin dar nada a cambio: su ventaja es la continuidad de la
+    # trayectoria, que a esa densidad ya no se nota. Cubic apila celdas en las
+    # tres dimensiones, que es lo que se quiere de un perfil que existe para
+    # que la pieza aguante carga y no para que se vea bien.
     sparse_infill_pattern="cubic",
     ensure_vertical_shell_thickness="ensure_all",
     infill_wall_overlap="25%",
@@ -525,7 +546,6 @@ DRAFT = replace(
     bottom_shell_layers="2",
     bottom_shell_thickness="0.56",
     sparse_infill_density="10%",
-    sparse_infill_pattern="grid",
     # infill_combination se queda en 0 (el valor de COMMON). Estaba en 1 y no
     # hacia nada: combinar dos capas de 0.28 da 0.56 mm de altura, mas que el
     # diametro del nozzle, asi que Orca no combina. Solo tendria efecto en un
