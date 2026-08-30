@@ -1,76 +1,30 @@
 {
-    "type": "machine",
-    "name": "EnderS1ProKlipper",
-    "inherits": "MyKlipper 0.4 nozzle",
-    "from": "User",
-    "is_custom_defined": "0",
-    "version": "2.4.0.1",
-    "printer_settings_id": "EnderS1ProKlipper",
-    "printer_variant": "0.4",
-    "printer_structure": "i3",
-    "nozzle_diameter": [
-        "0.4"
-    ],
-    "nozzle_type": "brass",
-    "extruder_type": [
-        "Direct Drive"
-    ],
-    "printer_extruder_id": [
-        "1"
-    ],
-    "printer_extruder_variant": [
-        "Direct Drive Standard"
-    ],
-    "printable_area": [
-        "0x0",
-        "220x0",
-        "220x220",
-        "0x220"
-    ],
-    "printable_height": "270",
+    "auxiliary_fan": "0",
     "bed_exclude_area": [
         "0x0"
     ],
-    "max_layer_height": [
-        "0.32"
+    "before_layer_change_gcode": ";BEFORE_LAYER_CHANGE\n;[layer_z]\n",
+    "change_filament_gcode": "PAUSE",
+    "default_filament_profile": [
+        "Printalot PLA @EnderS1Pro"
     ],
-    "min_layer_height": [
-        "0.08"
+    "default_print_profile": "0.20mm Standard @EnderS1Pro",
+    "deretraction_speed": [
+        "30"
     ],
-    "use_relative_e_distances": "1",
-    "use_firmware_retraction": "0",
     "emit_machine_limits_to_gcode": "0",
-    "silent_mode": "0",
-    "scan_first_layer": "0",
-    "auxiliary_fan": "0",
-    "machine_max_speed_x": [
-        "300",
-        "300"
+    "extruder_clearance_height_to_lid": "34",
+    "extruder_clearance_height_to_rod": "34",
+    "extruder_clearance_radius": "47",
+    "extruder_type": [
+        "Direct Drive"
     ],
-    "machine_max_speed_y": [
-        "300",
-        "300"
-    ],
-    "machine_max_speed_z": [
-        "10",
-        "10"
-    ],
-    "machine_max_speed_e": [
-        "50",
-        "50"
-    ],
-    "machine_max_acceleration_x": [
-        "2000",
-        "2000"
-    ],
-    "machine_max_acceleration_y": [
-        "2000",
-        "2000"
-    ],
-    "machine_max_acceleration_z": [
-        "200",
-        "200"
-    ],
+    "from": "User",
+    "host_type": "octoprint",
+    "inherits": "MyKlipper 0.4 nozzle",
+    "is_custom_defined": "0",
+    "layer_change_gcode": ";AFTER_LAYER_CHANGE\n;[layer_z]\nG92 E0\n",
+    "machine_end_gcode": "END_PRINT\n",
     "machine_max_acceleration_e": [
         "2000",
         "2000"
@@ -87,6 +41,22 @@
         "2000",
         "2000"
     ],
+    "machine_max_acceleration_x": [
+        "2000",
+        "2000"
+    ],
+    "machine_max_acceleration_y": [
+        "2000",
+        "2000"
+    ],
+    "machine_max_acceleration_z": [
+        "200",
+        "200"
+    ],
+    "machine_max_jerk_e": [
+        "2.5",
+        "2.5"
+    ],
     "machine_max_jerk_x": [
         "5",
         "5"
@@ -99,9 +69,21 @@
         "0.4",
         "0.4"
     ],
-    "machine_max_jerk_e": [
-        "2.5",
-        "2.5"
+    "machine_max_speed_e": [
+        "50",
+        "50"
+    ],
+    "machine_max_speed_x": [
+        "300",
+        "300"
+    ],
+    "machine_max_speed_y": [
+        "300",
+        "300"
+    ],
+    "machine_max_speed_z": [
+        "10",
+        "10"
     ],
     "machine_min_extruding_rate": [
         "0",
@@ -111,23 +93,42 @@
         "0",
         "0"
     ],
-    "retraction_length": [
-        "0.6"
+    "machine_pause_gcode": "PAUSE",
+    "machine_start_gcode": "START_PRINT BED_TEMP=[bed_temperature_initial_layer_single] EXTRUDER_TEMP=[nozzle_temperature_initial_layer] MATERIAL=[filament_type]\n",
+    "max_layer_height": [
+        "0.32"
+    ],
+    "min_layer_height": [
+        "0.08"
+    ],
+    "name": "EnderS1ProKlipper",
+    "nozzle_diameter": [
+        "0.4"
+    ],
+    "nozzle_type": "brass",
+    "print_host": "http://printer.local",
+    "print_host_webui": "http://printer.local",
+    "printable_area": [
+        "0x0",
+        "220x0",
+        "220x220",
+        "0x220"
+    ],
+    "printable_height": "270",
+    "printer_extruder_id": [
+        "1"
+    ],
+    "printer_extruder_variant": [
+        "Direct Drive Standard"
+    ],
+    "printer_settings_id": "EnderS1ProKlipper",
+    "printer_structure": "i3",
+    "printer_variant": "0.4",
+    "retract_before_wipe": [
+        "0%"
     ],
     "retract_length_toolchange": [
         "1"
-    ],
-    "retraction_speed": [
-        "35"
-    ],
-    "deretraction_speed": [
-        "30"
-    ],
-    "retraction_minimum_travel": [
-        "1"
-    ],
-    "retract_before_wipe": [
-        "0%"
     ],
     "retract_restart_extra": [
         "0"
@@ -138,6 +139,27 @@
     "retract_when_changing_layer": [
         "1"
     ],
+    "retraction_length": [
+        "0.6"
+    ],
+    "retraction_minimum_travel": [
+        "1"
+    ],
+    "retraction_speed": [
+        "35"
+    ],
+    "scan_first_layer": "0",
+    "silent_mode": "0",
+    "thumbnails": [
+        "32x32",
+        "300x300"
+    ],
+    "thumbnails_format": "PNG",
+    "time_lapse_gcode": "",
+    "type": "machine",
+    "use_firmware_retraction": "0",
+    "use_relative_e_distances": "1",
+    "version": "2.4.0.1",
     "wipe": [
         "1"
     ],
@@ -149,27 +171,5 @@
     ],
     "z_hop_types": [
         "Auto Lift"
-    ],
-    "thumbnails": [
-        "32x32",
-        "300x300"
-    ],
-    "thumbnails_format": "PNG",
-    "machine_start_gcode": "START_PRINT BED_TEMP=[bed_temperature_initial_layer_single] EXTRUDER_TEMP=[nozzle_temperature_initial_layer] MATERIAL=[filament_type]\n",
-    "machine_end_gcode": "END_PRINT\n",
-    "before_layer_change_gcode": ";BEFORE_LAYER_CHANGE\n;[layer_z]\n",
-    "layer_change_gcode": ";AFTER_LAYER_CHANGE\n;[layer_z]\nG92 E0\n",
-    "machine_pause_gcode": "PAUSE",
-    "change_filament_gcode": "PAUSE",
-    "time_lapse_gcode": "",
-    "default_print_profile": "0.20mm Standard @EnderS1Pro",
-    "default_filament_profile": [
-        "Printalot PLA @EnderS1Pro"
-    ],
-    "print_host": "http://printer.local",
-    "print_host_webui": "http://printer.local",
-    "host_type": "octoprint",
-    "extruder_clearance_radius": "47",
-    "extruder_clearance_height_to_rod": "34",
-    "extruder_clearance_height_to_lid": "34"
+    ]
 }

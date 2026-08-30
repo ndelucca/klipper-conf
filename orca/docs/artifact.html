@@ -519,14 +519,14 @@ footer{
 
   <h3>Repositorio</h3>
   <p>Toda esta configuración vive versionada en <code>~/nd.printer</code>, con dos capas sincronizadas:</p>
-  <div class="term"><pre> src/profiles.py            presets/                  OrcaSlicer
+  <div class="term"><pre> orcakit/profiles.py        presets/                  OrcaSlicer
  ---------------            --------                  ----------
  definición en Python  --&gt;  snapshot JSON        --&gt;  instalación
  (fuente de verdad)         (lo que se versiona)      (tu máquina)
 
        orca.py build              orca.py install
                                   orca.py verify   &lt;---- compara estas dos</pre></div>
-  <p><code>src/profiles.py</code> es la fuente de verdad. Para cambiar algo de forma permanente: editar ahí, correr <code>python orca.py build</code>, y después <code>python orca.py install</code> con <strong>OrcaSlicer cerrado</strong>. No editar los perfiles desde la interfaz de OrcaSlicer: se pierden en el próximo <code>install</code> y el repo deja de reflejar la realidad.</p>
+  <p><code>orcakit/profiles.py</code> es la fuente de verdad. Para cambiar algo de forma permanente: editar ahí, correr <code>python orca.py build</code>, y después <code>python orca.py install</code> con <strong>OrcaSlicer cerrado</strong>. No editar los perfiles desde la interfaz de OrcaSlicer: se pierden en el próximo <code>install</code> y el repo deja de reflejar la realidad.</p>
 </section>
 
 <!-- ================= 4 ================= -->
@@ -812,7 +812,7 @@ END_PRINT</pre></div>
     </tbody>
   </table></div>
   <p>⚠ Ojo con <code>inner_wall_speed</code>: a 150 mm/s con capa 0.20 y ancho 0.45 el caudal es 13.5 mm³/s, por encima del techo del hotend. Si subís ahí, el paso 5 deja de ser opcional. Es probable que el hotend stock sea el cuello de botella real y no la mecánica.</p>
-  <p>Editá <code>src/profiles.py</code> y corré <code>python orca.py build</code>, así los cambios quedan en un solo lugar y no dispersos en la UI. El diff de git en <code>presets/</code> te muestra exactamente qué cambió en la configuración.</p>
+  <p>Editá <code>orcakit/profiles.py</code> y corré <code>python orca.py build</code>, así los cambios quedan en un solo lugar y no dispersos en la UI. El diff de git en <code>presets/</code> te muestra exactamente qué cambió en la configuración.</p>
 </section>
 
 <!-- ================= 9 ================= -->
@@ -894,16 +894,22 @@ END_PRINT</pre></div>
  |   +-- v3/printer.cfg.example plantilla del archivo mutable
  |
  +-- orca/                      EL LAMINADOR
- |   +-- orca.py                CLI: where build install verify audit check
- |   +-- src/profiles.py        FUENTE DE VERDAD: los 9 perfiles
- |   +-- src/orcapaths.py       localización cross-platform del data dir
- |   +-- src/confpatch.py       parcheo de OrcaSlicer.conf con recálculo del MD5
- |   +-- src/flatten.py         resuelve la cadena de herencia
- |   +-- src/audit.py           auditoría de caudales y temperaturas
- |   +-- src/klippercfg.py      parser de los .cfg de Klipper
- |   +-- src/checkcfg.py        validación cruzada entre las dos mitades
- |   +-- presets/               snapshot versionado que consume OrcaSlicer
- |   +-- docs/                  este documento y su versión web
+ |   +-- orca.py                    CLI: where build install verify audit check
+ |   +-- orcakit/profiles.py       FUENTE DE VERDAD: los 9 perfiles
+ |   +-- orcakit/presets.py        la forma de un preset (dataclasses, sin valores)
+ |   +-- orcakit/snapshot.py       construcción y comparación de presets/
+ |   +-- orcakit/values.py         los valores de texto de Orca y Klipper, a números
+ |   +-- orcakit/orcapaths.py      localización cross-platform del data dir
+ |   +-- orcakit/printhost.py      resolución del host de impresión
+ |   +-- orcakit/confpatch.py      parcheo de OrcaSlicer.conf con recálculo del MD5
+ |   +-- orcakit/flatten.py        resuelve la cadena de herencia
+ |   +-- orcakit/klippercfg.py     parser de los .cfg de Klipper
+ |   +-- orcakit/report.py         hallazgos de una validación y su renderizado
+ |   +-- orcakit/audit.py          auditoría de caudales y temperaturas
+ |   +-- orcakit/checkcfg.py       validación cruzada entre las dos mitades
+ |   +-- tests/                    unittest de la stdlib, sin dependencias
+ |   +-- presets/                  snapshot versionado que consume OrcaSlicer
+ |   +-- docs/                     este documento y su versión web
  |
  +-- backup/20260826-original/  la configuración previa a este repo</pre></div>
   <p>La mitad de Klipper la despliega a la Raspberry el rol <code>klipper_config</code> de nd.homelab; la de OrcaSlicer se instala en cada PC con <code>orca.py install</code>.</p>

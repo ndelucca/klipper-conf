@@ -245,8 +245,10 @@ medido y no de uno de fábrica.
 ```
  orca/
    orca.py              CLI unico
-   src/profiles.py      fuente de verdad de los 9 perfiles
+   orcakit/             el toolkit: perfiles, validaciones y parsers
+   orcakit/profiles.py  fuente de verdad de los 9 perfiles
    presets/             snapshot versionado, generado
+   tests/               unittest de la stdlib, sin dependencias
    docs/                el porque de cada valor
 ```
 
@@ -256,7 +258,7 @@ detalle y `orca/docs/` para el razonamiento detrás de cada número.
 
 ```sh
 python orca/orca.py where     donde esta el directorio de datos de OrcaSlicer
-python orca/orca.py build     regenera presets/ desde src/profiles.py
+python orca/orca.py build     regenera presets/ desde orcakit/profiles.py
 python orca/orca.py install   instala presets/ en OrcaSlicer (con backup)
 python orca/orca.py verify    compara lo instalado contra presets/
 python orca/orca.py audit     audita caudales y herencia de lo instalado
@@ -270,12 +272,16 @@ python orca/orca.py check     valida los presets contra versions/<CURRENT>
 | `build --check` | que `presets/` quedó desactualizado respecto de `profiles.py` |
 | `check` | que los presets dejaron de ser coherentes con la config de Klipper |
 
-Los dos corren en CI en cada push.
+Los dos corren en CI en cada push, después de los tests del toolkit:
+
+```sh
+python -m unittest discover -s orca/tests -t orca
+```
 
 ## Cambiar algo
 
 ```
-  editar versions/v3/limits.cfg   o   orca/src/profiles.py
+  editar versions/v3/limits.cfg   o   orca/orcakit/profiles.py
         │
         ├─ python orca/orca.py build     regenera presets/
         ├─ python orca/orca.py check     falla si las mitades no coinciden

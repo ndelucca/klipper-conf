@@ -1,39 +1,9 @@
 {
-    "type": "filament",
-    "name": "Printalot TPU Flex @EnderS1Pro",
-    "inherits": "Generic TPU @System",
-    "from": "User",
-    "is_custom_defined": "0",
-    "version": "2.4.0.1",
-    "filament_settings_id": [
-        "Printalot TPU Flex @EnderS1Pro"
-    ],
-    "filament_vendor": [
-        "Printalot"
-    ],
-    "filament_type": [
-        "TPU"
-    ],
-    "filament_diameter": [
-        "1.75"
-    ],
-    "filament_extruder_variant": [
-        "Direct Drive Standard"
+    "close_fan_the_first_x_layers": [
+        "1"
     ],
     "compatible_printers": [
         "EnderS1ProKlipper"
-    ],
-    "slow_down_for_layer_cooling": [
-        "1"
-    ],
-    "reduce_fan_stop_start_freq": [
-        "1"
-    ],
-    "enable_overhang_bridge_fan": [
-        "1"
-    ],
-    "enable_pressure_advance": [
-        "0"
     ],
     "cool_plate_temp": [
         "45"
@@ -41,16 +11,140 @@
     "cool_plate_temp_initial_layer": [
         "45"
     ],
+    "enable_overhang_bridge_fan": [
+        "1"
+    ],
+    "enable_pressure_advance": [
+        "0"
+    ],
     "eng_plate_temp": [
         "45"
     ],
     "eng_plate_temp_initial_layer": [
         "45"
     ],
+    "fan_cooling_layer_time": [
+        "20"
+    ],
+    "fan_max_speed": [
+        "80"
+    ],
+    "fan_min_speed": [
+        "50"
+    ],
+    "filament_cost": [
+        "45"
+    ],
+    "filament_density": [
+        "1.21"
+    ],
+    "filament_deretraction_speed": [
+        "20"
+    ],
+    "filament_diameter": [
+        "1.75"
+    ],
+    "filament_extruder_variant": [
+        "Direct Drive Standard"
+    ],
+    "filament_flow_ratio": [
+        "1"
+    ],
+    "filament_max_volumetric_speed": [
+        "3.5"
+    ],
+    "filament_notes": [
+        "Printalot Flex / TPU (shore ~95A) - 1.75mm\nEl caudal maximo de 3.5 mm3/s es el que manda: Orca frena todas las\nvelocidades solo. No hace falta un proceso distinto.\nRetraccion minima (0.4mm) y sin z-hop para que no se trabe el Sprite.\nCargar el filamento a mano, despacio, con el extrusor caliente.\nPressure advance sugerido 0.6 (el TPU necesita valores altos)."
+    ],
+    "filament_retract_before_wipe": [
+        "0%"
+    ],
+    "filament_retract_when_changing_layer": [
+        "0"
+    ],
+    "filament_retraction_length": [
+        "0.4"
+    ],
+    "filament_retraction_minimum_travel": [
+        "3"
+    ],
+    "filament_retraction_speed": [
+        "20"
+    ],
+    "filament_settings_id": [
+        "Printalot TPU Flex @EnderS1Pro"
+    ],
+    "filament_type": [
+        "TPU"
+    ],
+    "filament_vendor": [
+        "Printalot"
+    ],
+    "filament_wipe": [
+        "0"
+    ],
+    "filament_z_hop": [
+        "0"
+    ],
+    "from": "User",
+    "full_fan_speed_layer": [
+        "2"
+    ],
     "hot_plate_temp": [
         "45"
     ],
     "hot_plate_temp_initial_layer": [
+        "45"
+    ],
+    "inherits": "Generic TPU @System",
+    "is_custom_defined": "0",
+    "name": "Printalot TPU Flex @EnderS1Pro",
+    "nozzle_temperature": [
+        "230"
+    ],
+    "nozzle_temperature_initial_layer": [
+        "230"
+    ],
+    "nozzle_temperature_range_high": [
+        "240"
+    ],
+    "nozzle_temperature_range_low": [
+        "210"
+    ],
+    "overhang_fan_speed": [
+        "80"
+    ],
+    "overhang_fan_threshold": [
+        "25%"
+    ],
+    "pressure_advance": [
+        "0.6"
+    ],
+    "reduce_fan_stop_start_freq": [
+        "1"
+    ],
+    "slow_down_for_layer_cooling": [
+        "1"
+    ],
+    "slow_down_layer_time": [
+        "6"
+    ],
+    "slow_down_min_speed": [
+        "10"
+    ],
+    "supertack_plate_temp": [
+        "45"
+    ],
+    "supertack_plate_temp_initial_layer": [
+        "45"
+    ],
+    "temperature_vitrification": [
+        "60"
+    ],
+    "textured_cool_plate_temp": [
+        "45"
+    ],
+    "textured_cool_plate_temp_initial_layer": [
         "45"
     ],
     "textured_plate_temp": [
@@ -59,100 +153,6 @@
     "textured_plate_temp_initial_layer": [
         "45"
     ],
-    "textured_cool_plate_temp": [
-        "45"
-    ],
-    "textured_cool_plate_temp_initial_layer": [
-        "45"
-    ],
-    "supertack_plate_temp": [
-        "45"
-    ],
-    "supertack_plate_temp_initial_layer": [
-        "45"
-    ],
-    "filament_density": [
-        "1.21"
-    ],
-    "filament_cost": [
-        "45"
-    ],
-    "filament_flow_ratio": [
-        "1"
-    ],
-    "filament_max_volumetric_speed": [
-        "3.5"
-    ],
-    "nozzle_temperature": [
-        "230"
-    ],
-    "nozzle_temperature_initial_layer": [
-        "230"
-    ],
-    "nozzle_temperature_range_low": [
-        "210"
-    ],
-    "nozzle_temperature_range_high": [
-        "240"
-    ],
-    "temperature_vitrification": [
-        "60"
-    ],
-    "close_fan_the_first_x_layers": [
-        "1"
-    ],
-    "full_fan_speed_layer": [
-        "2"
-    ],
-    "fan_min_speed": [
-        "50"
-    ],
-    "fan_max_speed": [
-        "80"
-    ],
-    "fan_cooling_layer_time": [
-        "20"
-    ],
-    "overhang_fan_speed": [
-        "80"
-    ],
-    "overhang_fan_threshold": [
-        "25%"
-    ],
-    "slow_down_layer_time": [
-        "6"
-    ],
-    "slow_down_min_speed": [
-        "10"
-    ],
-    "filament_retraction_length": [
-        "0.4"
-    ],
-    "filament_retraction_speed": [
-        "20"
-    ],
-    "filament_deretraction_speed": [
-        "20"
-    ],
-    "filament_retraction_minimum_travel": [
-        "3"
-    ],
-    "filament_retract_when_changing_layer": [
-        "0"
-    ],
-    "filament_z_hop": [
-        "0"
-    ],
-    "filament_wipe": [
-        "0"
-    ],
-    "filament_retract_before_wipe": [
-        "0%"
-    ],
-    "pressure_advance": [
-        "0.6"
-    ],
-    "filament_notes": [
-        "Printalot Flex / TPU (shore ~95A) - 1.75mm\nEl caudal maximo de 3.5 mm3/s es el que manda: Orca frena todas las\nvelocidades solo. No hace falta un proceso distinto.\nRetraccion minima (0.4mm) y sin z-hop para que no se trabe el Sprite.\nCargar el filamento a mano, despacio, con el extrusor caliente.\nPressure advance sugerido 0.6 (el TPU necesita valores altos)."
-    ]
+    "type": "filament",
+    "version": "2.4.0.1"
 }

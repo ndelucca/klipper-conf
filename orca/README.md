@@ -7,8 +7,8 @@ Clonás el repo, corrés un comando, y tenés exactamente los mismos 9 perfiles:
 una impresora, cuatro procesos y cuatro filamentos.
 
 - Documentación completa del *por qué* de cada valor: [`docs/orcaslicer-ender3s1pro-klipper.md`](docs/orcaslicer-ender3s1pro-klipper.md)
-- Sin dependencias: solo la librería estándar de Python 3.8 o superior
-- Funciona en Windows, macOS y Linux
+- Sin dependencias: solo la librería estándar de Python 3.14
+- Detecta el directorio de datos en Windows, macOS, Linux, Flatpak y Snap
 
 ---
 
@@ -33,7 +33,7 @@ python orca/orca.py verify     # confirma que quedó todo igual que en el repo
 | Comando | Qué hace |
 |---|---|
 | `python orca/orca.py where` | Muestra dónde detectó el directorio de datos de OrcaSlicer y si la app está abierta |
-| `python orca/orca.py build` | Regenera `presets/` desde `src/profiles.py` |
+| `python orca/orca.py build` | Regenera `presets/` desde `orcakit/profiles.py` |
 | `python orca/orca.py build --check` | No escribe nada: falla si `presets/` quedó desactualizado. Útil antes de commitear |
 | `python orca/orca.py install` | Hace backup de lo que haya, instala `presets/` y deja la selección apuntando a estos perfiles |
 | `python orca/orca.py install --dry-run` | Muestra qué archivos tocaría, sin escribir |
@@ -44,6 +44,19 @@ python orca/orca.py verify     # confirma que quedó todo igual que en el repo
 Todos aceptan `--data-dir RUTA` si la autodetección falla, y respetan la
 variable de entorno `ORCA_DATA_DIR`.
 
+## Tests
+
+```sh
+python -m unittest discover -s orca/tests -t orca
+```
+
+Solo `unittest` de la biblioteca estándar: nada que instalar. Cubren las piezas
+donde un error es caro y silencioso —el parser de los `.cfg` de Klipper, el
+recálculo del MD5 de `OrcaSlicer.conf`, la resolución de la herencia y la
+comparación del snapshot— más una regresión por cada bug que apareció. Corren
+en CI **antes** que `build --check` y `check`: si el verificador está roto, lo
+que diga después no significa nada.
+
 ---
 
 ## Cómo está armado
@@ -51,7 +64,7 @@ variable de entorno `ORCA_DATA_DIR`.
 El repo tiene **dos capas** que se mantienen sincronizadas:
 
 ```
- src/profiles.py            presets/                  OrcaSlicer
+ orcakit/profiles.py        presets/                  OrcaSlicer
  ---------------            --------                  ----------
  definición en Python  -->  snapshot JSON        -->  instalación
  (fuente de verdad)         (lo que se versiona)      (tu máquina)
@@ -60,7 +73,7 @@ El repo tiene **dos capas** que se mantienen sincronizadas:
                                   orca.py verify   <---- compara estas dos
 ```
 
-- **`src/profiles.py`** es la fuente de verdad. Ahí están los valores con sus
+- **`orcakit/profiles.py`** es la fuente de verdad. Ahí están los valores con sus
   comentarios explicando por qué son esos y no otros.
 - **`presets/`** es el snapshot exacto que consume OrcaSlicer. Se versiona para
   que el repo sirva aunque nunca corras `build`, y para que los diffs de git
@@ -76,13 +89,21 @@ pueden separar sin darse cuenta.
  |
  +-- orca.py                    CLI: where / build / install / verify / audit / check
  |
- +-- src/
+ +-- orcakit/                   el toolkit
  |   +-- profiles.py            FUENTE DE VERDAD: los 9 perfiles y sus comentarios
+ |   +-- presets.py             la forma de un preset: las dataclasses, sin valores
+ |   +-- snapshot.py            construccion y comparacion de presets/
+ |   +-- values.py              los valores de texto de Orca y Klipper, a numeros
  |   +-- orcapaths.py           localizacion cross-platform del directorio de datos
- |   +-- localhost_.py          resolucion del host de impresion (no versionado)
+ |   +-- printhost.py           resolucion del host de impresion (no versionado)
  |   +-- confpatch.py           parcheo de OrcaSlicer.conf con recalculo del MD5
  |   +-- flatten.py             resuelve la cadena de herencia de un preset
+ |   +-- klippercfg.py          parser minimo de los .cfg de Klipper
+ |   +-- report.py              hallazgos de una validacion y su renderizado
  |   +-- audit.py               auditoria de caudales, herencia y temperaturas
+ |   +-- checkcfg.py            validacion cruzada contra versions/<CURRENT>
+ |
+ +-- tests/                     unittest de la stdlib, sin dependencias
  |
  +-- presets/                   SNAPSHOT versionado que consume OrcaSlicer
  |   +-- machine/               EnderS1ProKlipper
@@ -92,9 +113,6 @@ pueden separar sin darse cuenta.
  +-- docs/
  |   +-- orcaslicer-ender3s1pro-klipper.md    el por que de cada valor
  |   +-- artifact.html                        la misma doc en formato web
- |
- +-- src/klippercfg.py         parser minimo de los .cfg de Klipper
- +-- src/checkcfg.py           validacion cruzada contra versions/<CURRENT>
 
  (la configuracion de Klipper vive en ../versions/, y ../backup/ guarda
   lo que habia antes de cada install: los dos fuera de esta carpeta)
@@ -137,7 +155,7 @@ falsa entre el repo y lo instalado.
 próximo `install` y el repo deja de reflejar la realidad.
 
 ```sh
-# 1. editar el valor en src/profiles.py
+# 1. editar el valor en orcakit/profiles.py
 # 2. regenerar el snapshot
 python orca/orca.py build
 

@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """Configuración de OrcaSlicer para Ender 3 S1 Pro + Klipper.
 
     python orca/orca.py where    dónde está el directorio de datos de OrcaSlicer
-    python orca/orca.py build    regenera presets/ desde src/profiles.py
+    python orca/orca.py build    regenera presets/ desde orcakit/profiles.py
     python orca/orca.py install  instala presets/ en OrcaSlicer (con backup)
     python orca/orca.py verify   compara lo instalado contra presets/
     python orca/orca.py audit    audita caudales y herencia de lo instalado
@@ -13,189 +12,140 @@
 quedó desactualizado respecto de profiles.py, el segundo que los presets dejaron
 de ser coherentes con la configuración de Klipper de la impresora.
 
-Sin dependencias externas: solo la librería estándar de Python 3.8+.
-Funciona en Windows, macOS y Linux.
+Sin dependencias externas: solo la librería estándar de Python 3.14.
 """
+
 import argparse
 import datetime
-import json
 import shutil
 import sys
 from pathlib import Path
 
-# HERE es esta carpeta (la mitad "slicer" del repo); REPO es la raiz, donde
+# HERE es esta carpeta (la mitad "slicer" del repo); REPO es la raíz, donde
 # convive con versions/ (la mitad "Klipper") y donde vive .printer-host.
+# Al ejecutar este script Python ya pone HERE en sys.path, así que `orcakit` se
+# importa sin tocar nada.
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
-sys.path.insert(0, str(HERE / "src"))
 
-import confpatch          # noqa: E402
-import localhost_         # noqa: E402
-import orcapaths          # noqa: E402
-import profiles           # noqa: E402
+from orcakit import (audit, checkcfg, confpatch, orcapaths, printhost,  # noqa: E402
+                     profiles, report, snapshot)
+from orcakit.snapshot import Kind  # noqa: E402
 
 PRESETS = HERE / "presets"
-KINDS = ("machine", "process", "filament")
 
 
-def with_local_host(tree):
+def with_local_host(tree: snapshot.Tree) -> tuple[snapshot.Tree, str | None, str | None]:
     """Aplica el host local sobre el snapshot. Devuelve (tree, host, origen).
 
-    El repo es publico: presets/ lleva un placeholder y la URL real solo existe
-    en la maquina. Ver src/localhost_.py.
+    El repo es público: presets/ lleva un placeholder y la URL real solo existe
+    en la máquina. Ver orcakit/printhost.py.
     """
-    host, origin = localhost_.resolve(REPO)
+    host, origin = printhost.resolve(REPO)
     if not host:
         return tree, None, None
-    out = {rel: localhost_.apply(rel, text, host, profiles.PRINTER)
-           for rel, text in tree.items()}
-    return out, host, origin
+    return ({rel: printhost.apply(rel, text, host, profiles.PRINTER)
+             for rel, text in tree.items()}, host, origin)
 
 
-# ---------------------------------------------------------------------------
-# helpers
-# ---------------------------------------------------------------------------
-def preset_json(cfg):
-    """Serialización canónica de un preset. Estable entre corridas y sistemas:
-    siempre UTF-8, siempre LF, siempre 4 espacios."""
-    return json.dumps(cfg, indent=4, ensure_ascii=False) + "\n"
-
-
-def info_text(base_id):
-    return ("sync_info = \nuser_id = \nsetting_id = \n"
-            "base_id = %s\nupdated_time = 0\n" % base_id)
-
-
-def snapshot():
-    """{ruta_relativa: contenido} de todo lo que debe haber en presets/."""
-    out = {}
-    for kind, name, cfg, base_id in profiles.all_presets():
-        out["%s/%s.json" % (kind, name)] = preset_json(cfg)
-        out["%s/%s.info" % (kind, name)] = info_text(base_id)
-    return out
-
-
-def read_tree(root):
-    out = {}
-    for kind in KINDS:
-        d = Path(root) / kind
-        if not d.is_dir():
-            continue
-        for p in sorted(d.iterdir()):
-            if p.suffix in (".json", ".info"):
-                out["%s/%s" % (kind, p.name)] = p.read_text(encoding="utf-8")
-    return out
-
-
-def same_json(a, b):
-    """Compara semánticamente: el orden de claves y el formato no importan."""
-    try:
-        return json.loads(a) == json.loads(b)
-    except (json.JSONDecodeError, TypeError):
-        return a == b
-
-
-def ts():
+def timestamp() -> str:
     return datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 
 
 # ---------------------------------------------------------------------------
 # where
 # ---------------------------------------------------------------------------
-def cmd_where(args):
-    print("Sistema: %s" % sys.platform)
+def cmd_where(args: argparse.Namespace) -> int:
+    print(f"Sistema: {sys.platform}")
     print("\nCandidatos (en orden):")
     for p in orcapaths.candidates():
-        mark = "  <- elegido" if p.is_dir() and orcapaths.looks_like_data_dir(p) else ""
+        chosen = "  <- elegido" if p.is_dir() and orcapaths.looks_like_data_dir(p) else ""
         state = "existe" if p.is_dir() else "no existe"
-        print("  [%-9s] %s%s" % (state, p, mark))
+        print(f"  [{state:<9}] {p}{chosen}")
+
     data = orcapaths.data_dir(args.data_dir, require=False)
-    print("\nDirectorio de datos : %s" % (data or "NO ENCONTRADO"))
+    print(f"\nDirectorio de datos : {data or 'NO ENCONTRADO'}")
     if data:
-        print("Presets de usuario  : %s" % orcapaths.user_dir(data))
-        print("Presets de fabrica  : %s" % orcapaths.system_dir(data))
-        print("Configuracion       : %s" % orcapaths.conf_path(data))
-    running = orcapaths.orca_running()
-    print("OrcaSlicer abierto  : %s"
-          % {True: "si", False: "no", None: "no se pudo determinar"}[running])
+        print(f"Presets de usuario  : {orcapaths.user_dir(data)}")
+        print(f"Presets de fabrica  : {orcapaths.system_dir(data)}")
+        print(f"Configuracion       : {orcapaths.conf_path(data)}")
+
+    running = {True: "si", False: "no", None: "no se pudo determinar"}
+    print(f"OrcaSlicer abierto  : {running[orcapaths.orca_running()]}")
     return 0
 
 
 # ---------------------------------------------------------------------------
 # build
 # ---------------------------------------------------------------------------
-def cmd_build(args):
-    want = snapshot()
-    have = read_tree(PRESETS)
-
-    added = sorted(set(want) - set(have))
-    removed = sorted(set(have) - set(want))
-    changed = sorted(k for k in set(want) & set(have)
-                     if (not same_json(want[k], have[k])
-                         if k.endswith(".json") else want[k] != have[k]))
-
-    if args.check:
-        if added or removed or changed:
-            print("El snapshot en presets/ NO coincide con src/profiles.py:")
-            for k in added:
-                print("  falta    %s" % k)
-            for k in removed:
-                print("  sobra    %s" % k)
-            for k in changed:
-                print("  difiere  %s" % k)
-            print("\nCorre 'python orca.py build' y commitea el resultado.")
-            return 1
-        print("presets/ esta al dia con src/profiles.py (%d archivos)." % len(want))
-        return 0
-
-    for kind in KINDS:
+def write_presets() -> snapshot.Diff:
+    """Vuelca el snapshot a presets/. Devuelve qué cambió."""
+    want = snapshot.build()
+    changes = snapshot.diff(want, snapshot.read(PRESETS))
+    for kind in Kind:
         (PRESETS / kind).mkdir(parents=True, exist_ok=True)
-    for k in removed:
-        (PRESETS / k).unlink()
+    for rel in changes.removed:
+        (PRESETS / rel).unlink()
     for rel, text in want.items():
         (PRESETS / rel).write_text(text, encoding="utf-8", newline="\n")
+    return changes
 
-    if added or removed or changed:
-        for k in added:
-            print("  nuevo     %s" % k)
-        for k in removed:
-            print("  eliminado %s" % k)
-        for k in changed:
-            print("  cambiado  %s" % k)
-    print("presets/ regenerado: %d archivos (%d perfiles)."
-          % (len(want), len(want) // 2))
+
+def cmd_build(args: argparse.Namespace) -> int:
+    want = snapshot.build()
+
+    if args.check:
+        changes = snapshot.diff(want, snapshot.read(PRESETS))
+        if not changes:
+            print(f"presets/ esta al dia con orcakit/profiles.py "
+                  f"({len(want)} archivos).")
+            return 0
+        print("El snapshot en presets/ NO coincide con orcakit/profiles.py:")
+        for rel in changes.added:
+            print(f"  falta    {rel}")
+        for rel in changes.removed:
+            print(f"  sobra    {rel}")
+        for rel in changes.changed:
+            print(f"  difiere  {rel}")
+        print("\nCorre 'python orca/orca.py build' y commitea el resultado.")
+        return 1
+
+    changes = write_presets()
+    for rel in changes.added:
+        print(f"  nuevo     {rel}")
+    for rel in changes.removed:
+        print(f"  eliminado {rel}")
+    for rel in changes.changed:
+        print(f"  cambiado  {rel}")
+    print(f"presets/ regenerado: {len(want)} archivos ({len(want) // 2} perfiles).")
     return 0
 
 
 # ---------------------------------------------------------------------------
 # install
 # ---------------------------------------------------------------------------
-def cmd_install(args):
-    want = snapshot()
-    if not (PRESETS / "machine").is_dir():
+def cmd_install(args: argparse.Namespace) -> int:
+    want = snapshot.build()
+    if not (PRESETS / Kind.MACHINE).is_dir():
         print("presets/ no existe todavia. Corriendo build primero.\n")
-        cmd_build(argparse.Namespace(check=False))
+        write_presets()
 
-    have = read_tree(PRESETS)
-    stale = [k for k in want if k not in have
-             or (not same_json(want[k], have[k]) if k.endswith(".json")
-                 else want[k] != have[k])]
-    if stale:
-        print("AVISO: presets/ esta desactualizado respecto de src/profiles.py.")
+    have = snapshot.read(PRESETS)
+    if snapshot.diff(want, have):
+        print("AVISO: presets/ esta desactualizado respecto de orcakit/profiles.py.")
         print("       Se instala el contenido de presets/ tal cual.")
-        print("       Corre 'python orca.py build' si querias lo otro.\n")
+        print("       Corre 'python orca/orca.py build' si querias lo otro.\n")
 
     have, host, origin = with_local_host(have)
 
     data = orcapaths.data_dir(args.data_dir)
     user = orcapaths.user_dir(data)
-    print("Directorio de datos: %s" % data)
+    print(f"Directorio de datos: {data}")
     if host:
-        print("Host de impresion  : %s  (%s)" % (host, origin))
+        print(f"Host de impresion  : {host}  ({origin})")
     else:
-        print("Host de impresion  : %s  (placeholder: configura %s o %s)"
-              % (profiles.PLACEHOLDER_HOST, localhost_.ENV_VAR,
-                 localhost_.FILE_NAME))
+        print(f"Host de impresion  : {profiles.PLACEHOLDER_HOST}  "
+              f"(placeholder: configura {printhost.ENV_VAR} o {printhost.FILE_NAME})")
 
     running = orcapaths.orca_running()
     if running and not args.force and not args.dry_run:
@@ -210,44 +160,42 @@ def cmd_install(args):
         if running:
             print("Aviso: OrcaSlicer esta abierto. Para instalar de verdad,\n"
                   "       cerralo primero.")
-        print("\n[dry-run] Se escribirian %d archivos en %s" % (len(have), user))
+        print(f"\n[dry-run] Se escribirian {len(have)} archivos en {user}")
         for rel in sorted(have):
-            dest = user / rel
-            state = "sobrescribe" if dest.exists() else "crea       "
-            print("  %s %s" % (state, rel))
-        loc = user / "_local"
-        if loc.is_dir():
+            state = "sobrescribe" if (user / rel).exists() else "crea       "
+            print(f"  {state} {rel}")
+        if (user / "_local").is_dir():
             print("  elimina     _local/  (bundles importados)")
         print("\n[dry-run] No se escribio nada.")
         return 0
 
     # 1. backup de lo que haya
     if user.is_dir() and any(user.iterdir()):
-        dest = REPO / "backup" / ts()
+        dest = REPO / "backup" / timestamp()
         dest.parent.mkdir(exist_ok=True)
         shutil.copytree(user, dest / "user" / "default")
         conf = orcapaths.conf_path(data)
         if conf.is_file():
             shutil.copy2(conf, dest / "OrcaSlicer.conf")
-        print("\nBackup de lo anterior: backup/%s/" % dest.name)
+        print(f"\nBackup de lo anterior: backup/{dest.name}/")
 
-    # 2. limpiar presets nuestros y bundles importados
-    loc = user / "_local"
-    if loc.is_dir():
+    # 2. limpiar presets nuestros y bundles importados.
+    #    machine/ NO se borra a proposito: ahi pueden convivir perfiles de otras
+    #    impresoras del usuario, que este repo no gestiona. Los nuestros se
+    #    pisan igual al escribirlos en el paso 3.
+    if (loc := user / "_local").is_dir():
         shutil.rmtree(loc)
         print("Eliminado: user/default/_local/ (bundles importados)")
-    for kind in ("process", "filament"):
-        d = user / kind
-        if d.is_dir():
+    for kind in (Kind.PROCESS, Kind.FILAMENT):
+        if (d := user / kind).is_dir():
             shutil.rmtree(d)
 
     # 3. escribir
-    for kind in KINDS:
+    for kind in Kind:
         (user / kind).mkdir(parents=True, exist_ok=True)
     for rel, text in sorted(have.items()):
         (user / rel).write_text(text, encoding="utf-8", newline="\n")
-    print("Instalados %d archivos (%d perfiles) en %s"
-          % (len(have), len(have) // 2, user))
+    print(f"Instalados {len(have)} archivos ({len(have) // 2} perfiles) en {user}")
 
     # 4. dejar la seleccion apuntando a nuestros perfiles
     if args.select:
@@ -261,109 +209,98 @@ def cmd_install(args):
                   "la primera vez que abras OrcaSlicer.")
         else:
             print("\nSeleccion recordada:")
-            for line in log:
-                print(line)
+            print("\n".join(log))
 
-    print("\nListo. Abri OrcaSlicer y verifica con 'python orca.py verify'.")
+    print("\nListo. Abri OrcaSlicer y verifica con 'python orca/orca.py verify'.")
     return 0
 
 
 # ---------------------------------------------------------------------------
 # verify
 # ---------------------------------------------------------------------------
-def cmd_verify(args):
+def cmd_verify(args: argparse.Namespace) -> int:
     data = orcapaths.data_dir(args.data_dir)
     user = orcapaths.user_dir(data)
-    print("Directorio de datos: %s\n" % data)
+    print(f"Directorio de datos: {data}\n")
 
-    repo = read_tree(PRESETS)
+    repo = snapshot.read(PRESETS)
     if not repo:
-        raise SystemExit("presets/ esta vacio. Corre 'python orca.py build'.")
-    # El host local se aplica tambien aca, si no verify marcaria una diferencia
+        raise SystemExit("presets/ esta vacio. Corre 'python orca/orca.py build'.")
+    # El host local se aplica tambien aca: si no, verify marcaria una diferencia
     # falsa entre el placeholder del repo y la URL real instalada.
     repo, host, origin = with_local_host(repo)
     if host:
-        print("Host de impresion esperado: %s  (%s)\n" % (host, origin))
+        print(f"Host de impresion esperado: {host}  ({origin})\n")
 
     bad = 0
     for rel in sorted(repo):
         dest = user / rel
         if not dest.is_file():
-            print("  FALTA     %s" % rel)
+            print(f"  FALTA     {rel}")
             bad += 1
-            continue
-        got = dest.read_text(encoding="utf-8")
-        ok = same_json(repo[rel], got) if rel.endswith(".json") else repo[rel] == got
-        if ok:
-            print("  ok        %s" % rel)
+        elif snapshot.equal(rel, repo[rel], dest.read_text(encoding="utf-8")):
+            print(f"  ok        {rel}")
         else:
-            print("  DIFIERE   %s" % rel)
+            print(f"  DIFIERE   {rel}")
             bad += 1
 
-    extra = sorted(set(read_tree(user)) - set(repo))
-    for rel in extra:
-        print("  EXTRA     %s  (no viene de este repo)" % rel)
-
-    loc = user / "_local"
-    if loc.is_dir():
+    for rel in sorted(set(snapshot.read(user)) - set(repo)):
+        print(f"  EXTRA     {rel}  (no viene de este repo)")
+    if (user / "_local").is_dir():
         print("  EXTRA     _local/  (bundle importado, ensucia las listas)")
 
     conf = orcapaths.conf_path(data)
     if conf.is_file():
-        cfg, declared, actual = confpatch.read(conf)
-        if declared and actual:
-            print("\n  checksum OrcaSlicer.conf: %s"
-                  % ("ok" if declared == actual else
-                     "MISMATCH (%s vs %s)" % (declared, actual)))
+        cfg, declared, computed = confpatch.read(conf)
+        if declared and computed:
+            state = "ok" if declared == computed else f"MISMATCH ({declared} vs {computed})"
+            print(f"\n  checksum OrcaSlicer.conf: {state}")
         sel = (cfg.get("orca_presets") or [{}])[0]
-        print("  seleccion activa: %s / %s / %s"
-              % (sel.get("machine", "?"), sel.get("process", "?"),
-                 sel.get("filament", "?")))
+        print(f"  seleccion activa: {sel.get('machine', '?')} / "
+              f"{sel.get('process', '?')} / {sel.get('filament', '?')}")
 
-    print("\n%s" % ("Todo coincide con el repo." if not bad
-                    else "%d archivo(s) con diferencias." % bad))
+    print(f"\n{'Todo coincide con el repo.' if not bad else f'{bad} archivo(s) con diferencias.'}")
     return 1 if bad else 0
 
 
 # ---------------------------------------------------------------------------
-# audit
+# audit / check
 # ---------------------------------------------------------------------------
-def cmd_audit(args):
-    import audit
-    return audit.run(orcapaths.data_dir(args.data_dir))
+def cmd_audit(args: argparse.Namespace) -> int:
+    result = audit.run(orcapaths.data_dir(args.data_dir))
+    print(report.render(result))
+    return result.exit_code
 
 
-# ---------------------------------------------------------------------------
-# check
-# ---------------------------------------------------------------------------
-def klipper_dir(args):
+def klipper_dir(args: argparse.Namespace) -> Path:
     """Directorio de configuracion de Klipper contra el que validar.
 
     Por defecto, la version que declara versions/CURRENT, que es la unica fuente
     de verdad de cual esta viva. El rol klipper_config de nd.homelab lee el mismo
     archivo.
     """
-    if getattr(args, "klipper_dir", None):
+    if args.klipper_dir:
         return Path(args.klipper_dir)
     marca = REPO / "versions" / "CURRENT"
     if not marca.is_file():
-        raise SystemExit("No existe %s. Usa --klipper-dir." % marca)
-    ver = marca.read_text(encoding="utf-8").strip()
-    d = REPO / "versions" / ver
+        raise SystemExit(f"No existe {marca}. Usa --klipper-dir.")
+    version = marca.read_text(encoding="utf-8").strip()
+    d = REPO / "versions" / version
     if not d.is_dir():
-        raise SystemExit("versions/CURRENT dice '%s' pero %s no existe." % (ver, d))
+        raise SystemExit(f"versions/CURRENT dice '{version}' pero {d} no existe.")
     return d
 
 
-def cmd_check(args):
-    import checkcfg
-    return checkcfg.run(klipper_dir(args))
+def cmd_check(args: argparse.Namespace) -> int:
+    result = checkcfg.run(klipper_dir(args))
+    print(report.render(result))
+    return result.exit_code
 
 
 # ---------------------------------------------------------------------------
-def main(argv=None):
-    # --data-dir se acepta antes o despues del subcomando. SUPPRESS evita que
-    # la version del subparser pise a la del parser principal cuando no se pasa.
+def build_parser() -> argparse.ArgumentParser:
+    # --data-dir se acepta antes o despues del subcomando. SUPPRESS evita que la
+    # version del subparser pise a la del parser principal cuando no se pasa.
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--data-dir", metavar="RUTA", default=argparse.SUPPRESS,
                         help="directorio de datos de OrcaSlicer "
@@ -375,12 +312,13 @@ def main(argv=None):
     sub = ap.add_subparsers(dest="cmd")
 
     sub.add_parser("where", parents=[common],
-                   help="muestra donde esta OrcaSlicer")
+                   help="muestra donde esta OrcaSlicer").set_defaults(run=cmd_where)
 
     b = sub.add_parser("build", parents=[common],
-                       help="regenera presets/ desde src/profiles.py")
+                       help="regenera presets/ desde orcakit/profiles.py")
     b.add_argument("--check", action="store_true",
                    help="no escribe: falla si presets/ esta desactualizado")
+    b.set_defaults(run=cmd_build)
 
     i = sub.add_parser("install", parents=[common],
                        help="instala presets/ en OrcaSlicer")
@@ -389,25 +327,29 @@ def main(argv=None):
                    help="instala aunque OrcaSlicer este abierto")
     i.add_argument("--no-select", dest="select", action="store_false",
                    help="no toca OrcaSlicer.conf")
+    i.set_defaults(run=cmd_install)
 
     sub.add_parser("verify", parents=[common],
-                   help="compara lo instalado contra presets/")
+                   help="compara lo instalado contra presets/").set_defaults(run=cmd_verify)
     sub.add_parser("audit", parents=[common],
-                   help="audita caudales y herencia")
+                   help="audita caudales y herencia").set_defaults(run=cmd_audit)
 
     c = sub.add_parser("check", parents=[common],
                        help="valida los presets contra la config de Klipper")
     c.add_argument("--klipper-dir", metavar="RUTA", default=None,
                    help="default: versions/<CURRENT>")
+    c.set_defaults(run=cmd_check)
+    return ap
 
+
+def main(argv: list[str] | None = None) -> int:
+    ap = build_parser()
     args = ap.parse_args(argv)
     if not args.cmd:
         ap.print_help()
         return 0
     args.data_dir = getattr(args, "data_dir", None)
-    return {"where": cmd_where, "build": cmd_build, "install": cmd_install,
-            "verify": cmd_verify, "audit": cmd_audit,
-            "check": cmd_check}[args.cmd](args)
+    return args.run(args)
 
 
 if __name__ == "__main__":

@@ -154,7 +154,7 @@ Toda esta configuración vive versionada en `~/nd.printer`, con dos capas
 sincronizadas:
 
 ```
- src/profiles.py            presets/                  OrcaSlicer
+ orcakit/profiles.py        presets/                  OrcaSlicer
  ---------------            --------                  ----------
  definición en Python  -->  snapshot JSON        -->  instalación
  (fuente de verdad)         (lo que se versiona)      (tu máquina)
@@ -163,7 +163,7 @@ sincronizadas:
                                   orca.py verify   <---- compara estas dos
 ```
 
-`src/profiles.py` es la fuente de verdad. Para cambiar algo de forma
+`orcakit/profiles.py` es la fuente de verdad. Para cambiar algo de forma
 permanente: editar ahí, correr `python orca.py build`, y después
 `python orca.py install` con **OrcaSlicer cerrado**.
 
@@ -689,7 +689,7 @@ es 13.5 mm3/s, por encima del techo del hotend. Si subís ahí, el paso 5 (Max
 Flowrate) deja de ser opcional. Es probable que el hotend stock sea el cuello de
 botella real y no la mecánica.
 
-Editá `src/profiles.py` y corré `python orca.py build`, así los cambios quedan
+Editá `orcakit/profiles.py` y corré `python orca.py build`, así los cambios quedan
 versionados en un solo lugar y no dispersos en la UI. El diff de git en
 `presets/` te va a mostrar exactamente qué cambió en la configuración.
 
@@ -777,14 +777,20 @@ Todo vive en el repositorio git `~/nd.printer`, que tiene las dos mitades:
  |   +-- v3/printer.cfg.example plantilla del archivo mutable
  |
  +-- orca/                      EL LAMINADOR
- |   +-- orca.py                CLI: where build install verify audit check
- |   +-- src/profiles.py        FUENTE DE VERDAD: los 9 perfiles
- |   +-- src/orcapaths.py       localizacion cross-platform del data dir
- |   +-- src/confpatch.py       parcheo de OrcaSlicer.conf con recalculo del MD5
- |   +-- src/flatten.py         resuelve la cadena de herencia
- |   +-- src/audit.py           auditoria de caudales y temperaturas
- |   +-- src/klippercfg.py      parser de los .cfg de Klipper
- |   +-- src/checkcfg.py        validacion cruzada entre las dos mitades
+ |   +-- orca.py                    CLI: where build install verify audit check
+ |   +-- orcakit/profiles.py       FUENTE DE VERDAD: los 9 perfiles
+ |   +-- orcakit/presets.py        la forma de un preset (dataclasses, sin valores)
+ |   +-- orcakit/snapshot.py       construccion y comparacion de presets/
+ |   +-- orcakit/values.py         los valores de texto de Orca y Klipper, a numeros
+ |   +-- orcakit/orcapaths.py      localizacion cross-platform del data dir
+ |   +-- orcakit/printhost.py      resolucion del host de impresion
+ |   +-- orcakit/confpatch.py      parcheo de OrcaSlicer.conf con recalculo del MD5
+ |   +-- orcakit/flatten.py        resuelve la cadena de herencia
+ |   +-- orcakit/klippercfg.py     parser de los .cfg de Klipper
+ |   +-- orcakit/report.py         hallazgos de una validacion y su renderizado
+ |   +-- orcakit/audit.py          auditoria de caudales y temperaturas
+ |   +-- orcakit/checkcfg.py       validacion cruzada entre las dos mitades
+ |   +-- tests/                    unittest de la stdlib, sin dependencias
  |   +-- presets/               snapshot versionado que consume OrcaSlicer
  |   +-- docs/                  este documento y su version web
  |
