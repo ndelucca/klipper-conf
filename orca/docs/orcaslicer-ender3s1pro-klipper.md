@@ -267,7 +267,8 @@ son tres parámetros, pero del otro lado el macro hace bastante más:
  G28 Z                                       RE-HOME EN CALIENTE. Ver abajo
  BED_MESH_PROFILE LOAD=default               la malla, que es de la máquina
  SET_PRESSURE_ADVANCE                        según el MATERIAL anunciado
- purga en X=25                               dentro de la malla, no en X=2
+ G1 Z10 / G1 X8 Y10                          reposicionar ANTES de bajar
+ purga en X=8                                borde de la chapa Y dentro de la malla
 ```
 
 El `G28 Z` en caliente es el que más rinde de esa lista. El primer `G28` ocurre
@@ -278,10 +279,26 @@ ABS. Cae además en el mismo punto que el `zero_reference_position` de
 `[bed_mesh]` (110,110 en coordenadas de probe), así que la referencia del Z y el
 ancla de la malla son físicamente el mismo lugar.
 
-La purga se movió de X=2 a X=25 por un motivo parecido: `mesh_min` arranca en
-X=20, así que en X=2 esos 130 mm de línea salían con el Z **extrapolado**. Ahora
-se imprime sobre dato medido, que es justo lo que la vuelve útil como testigo de
-la primera capa.
+El reposicionamiento que va justo antes de la purga no es decorativo. `G28 Z`
+pasa por `[safe_z_home]`, que manda el carro a `home_xy_position` (158,110) para
+palpar y **no vuelve solo** (`move_to_previous` es `false` por defecto). Sin ese
+`G1 X8 Y10`, el descenso a Z=0.28 ocurre en el medio de la cama y la primera
+línea de purga cruza la placa en diagonal, 136 mm, con el nozzle apoyado.
+
+La purga vive en **X=8**. Estuvo en X=2, fuera de la malla: esos 130 mm de línea
+salían con el Z **extrapolado**, o sea que la línea que existe para juzgar la
+primera capa era justo donde menos se sabía. Se movió a X=25 para meterla dentro
+de la malla, pero eso se comía 25 mm del borde izquierdo de la bandeja. Bajando
+`mesh_min` a X=5 desaparece el dilema: en X=8 la purga cae sobre dato medido y
+sobre el borde. `mesh_min` estaba en 20 por copiar la posición del primer
+tornillo de nivelación, no por una restricción física — hacia la izquierda el
+probe llega hasta X=-58, así que palpar X=5 sólo exige el nozzle en X=53.
+
+El borde **derecho** es otra historia y no tiene solución: con `x_offset: -48`,
+palpar X=200 ya exige el nozzle en X=248 contra un `position_max` de 250. Los
+últimos 20 mm de la bandeja son inalcanzables para el probe, así que van con Z
+extrapolado por construcción. Es una consecuencia del toolhead, no un valor a
+ajustar.
 
 **`G92 E0`** en el cambio de capa es obligatorio: el perfil usa extrusión
 relativa (`M83`, que tu macro ya setea) y sin ese reset se pierde precisión de
