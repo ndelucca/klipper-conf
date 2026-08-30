@@ -23,9 +23,9 @@
     ],
     "printable_area": [
         "0x0",
-        "250x0",
-        "250x235",
-        "0x235"
+        "220x0",
+        "220x220",
+        "0x220"
     ],
     "printable_height": "270",
     "bed_exclude_area": [
@@ -52,8 +52,8 @@
         "300"
     ],
     "machine_max_speed_z": [
-        "5",
-        "5"
+        "10",
+        "10"
     ],
     "machine_max_speed_e": [
         "50",
@@ -68,8 +68,8 @@
         "2000"
     ],
     "machine_max_acceleration_z": [
-        "100",
-        "100"
+        "200",
+        "200"
     ],
     "machine_max_acceleration_e": [
         "2000",

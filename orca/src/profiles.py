@@ -11,13 +11,14 @@ commitear el cambio junto con el snapshot regenerado.
 Contexto de hardware (leído de printer.cfg vía Moonraker, 2026-08-26):
 
     Cinemática     cartesian (bed slinger)
-    Área útil      X 250 x Y 235 x Z 270 mm
+    Área util      X 220 x Y 220 (chapa) - el carro llega a 250 x 235
+    Altura util    Z 270 mm
     Extrusor       Sprite Pro direct drive, gear ratio 42:12
     Hotend         bimetálico, max_temp 300
     Cama           max_temp 110
     max_velocity   300 mm/s
     max_accel      2000 mm/s2   <- techo real de todas las aceleraciones
-    max_z_velocity   5 mm/s
+    max_z_velocity  10 mm/s
     [input_shaper]     NO CONFIGURADO
     pressure_advance   NO CONFIGURADO
 """
@@ -84,8 +85,15 @@ MACHINE = {
     "printer_extruder_id": ["1"],
     "printer_extruder_variant": ["Direct Drive Standard"],
 
-    # Volumen real segun printer.cfg (position_max X250 / Y235 / Z270)
-    "printable_area": ["0x0", "250x0", "250x235", "0x235"],
+    # Area util de la CHAPA, que no es lo mismo que el recorrido del carro.
+    # [stepper_x] position_max 250 / [stepper_y] 235 es hasta donde llega el
+    # carro; el plato magnetico de la S1 Pro es 235x235 con 220x220 utiles.
+    # Declarar 250x235 aca dejaba a Orca poner una pieza 30 mm fuera del plato.
+    # check valida que esto ENTRE en el recorrido, no que sea igual.
+    #
+    # La malla llega solo hasta X=200 ([bed_mesh] mesh_max, limite fisico del
+    # x_offset -48 del BLTouch), asi que de X=200 a 220 el Z esta extrapolado.
+    "printable_area": ["0x0", "220x0", "220x220", "0x220"],
     "printable_height": "270",
     "bed_exclude_area": ["0x0"],
     "max_layer_height": ["0.32"],
@@ -102,11 +110,11 @@ MACHINE = {
     # Limites espejados de printer.cfg (solo estimacion de tiempo)
     "machine_max_speed_x": ["300", "300"],
     "machine_max_speed_y": ["300", "300"],
-    "machine_max_speed_z": ["5", "5"],
+    "machine_max_speed_z": ["10", "10"],
     "machine_max_speed_e": ["50", "50"],
     "machine_max_acceleration_x": ["2000", "2000"],
     "machine_max_acceleration_y": ["2000", "2000"],
-    "machine_max_acceleration_z": ["100", "100"],
+    "machine_max_acceleration_z": ["200", "200"],
     "machine_max_acceleration_e": ["2000", "2000"],
     "machine_max_acceleration_extruding": ["2000", "2000"],
     "machine_max_acceleration_retracting": ["2000", "2000"],
@@ -197,7 +205,7 @@ COMMON = {
 
     # Velocidades comunes
     "travel_speed": "250",
-    "travel_speed_z": ["5"],
+    "travel_speed_z": ["10"],
     "initial_layer_travel_speed": "100",
     # 40% del contorno exterior. Un agujero chico es un perimetro corto: sin
     # pressure advance calibrado, cuanto mas lento, mas pareja la extrusion.
@@ -221,6 +229,11 @@ COMMON = {
     "seam_position": "aligned",
     "staggered_inner_seams": "1",
     "seam_gap": "10%",
+    # Scarf joint apagado ACA a proposito: se activa por proceso, no en comun.
+    # Reparte el solape de la costura en una rampa de varios milimetros en vez
+    # de cortar y volver a arrancar en el mismo punto, que es lo que deja el
+    # blob. Solo vale la pena en los perfiles que se miran de cerca: en Draft
+    # es tiempo gastado en una superficie que a nadie le importa.
     "seam_slope_type": "none",
     "wipe_speed": "80%",
     "role_based_wipe_speed": "1",
@@ -251,7 +264,27 @@ COMMON = {
     "overhang_reverse_internal_only": "0",
     "extra_perimeters_on_overhangs": "1",
 
-    # Compensaciones
+    # Compensaciones. SIN MEDIR TODAVIA: los valores quedan como estaban a
+    # proposito, porque una compensacion mal puesta se aplica a todos los
+    # agujeros de todas las piezas e introduce un error sistematico en la
+    # direccion contraria. Peor que no compensar.
+    #
+    # Pendiente: OrcaSlicer -> Calibration -> Tolerance. Imprime bloques con
+    # agujeros de medida conocida, se miden con calibre, y sale
+    #     xy_hole_compensation = (nominal - medido) / 2
+    # Un agujero sale sistematicamente mas chico que el modelo porque el
+    # perimetro interno es convexo hacia adentro y el plastico se contrae hacia
+    # el centro del arco. En un nozzle 0.4 el error tipico es 0.05-0.15 mm de
+    # diametro: en un agujero de 5 mm eso decide si entra un M5 o no.
+    #
+    # Ojo que esto es OTRA cosa que el agujero deformado que se arreglo con
+    # overhang_reverse + extra_perimeters_on_overhangs: aquello era la FORMA,
+    # esto es el TAMANO. Se pueden tener las dos mal por separado.
+    #
+    # elefant_foot_compensation 0.15 tambien es un valor generico heredado.
+    # Depende del z_offset, de la temperatura de cama y del PEI concreto.
+    # Sintoma de pasarse: la primera capa queda mas angosta que la segunda, con
+    # escalon. Sintoma de quedarse corto: la pestana aplastada que sobresale.
     "elefant_foot_compensation": "0.15",
     "xy_hole_compensation": "0",
     "xy_contour_compensation": "0",
@@ -345,6 +378,12 @@ FINE = _proc("0.12mm Fine " + SUF, "0.12mm Fine @MyKlipper", {
     "sparse_infill_density": "15%",
     "sparse_infill_pattern": "grid",
     "reduce_crossing_wall": "1",
+    # Scarf joint. `conditional` hace que se aplique solo donde la pared es lo
+    # bastante lisa (angulo > 155 grados): en una esquina viva el scarf se ve
+    # peor que la costura normal, asi que ahi se abstiene.
+    "seam_slope_type": "external",
+    "seam_slope_conditional": "1",
+    "scarf_angle_threshold": "155",
 })
 
 # 0.20mm Standard: el de todos los dias (DEFAULT)
@@ -362,10 +401,23 @@ STANDARD = _proc("0.20mm Standard " + SUF, "0.20mm Standard @MyKlipper", {
     # mientras no haya pressure advance calibrado.
     "outer_wall_speed": "50",
     "inner_wall_speed": "110",
-    # 120 mm/s x 0.45 x 0.20 = 10.8 mm3/s, justo debajo del tope de 11 del PLA:
-    # asi el perfil corre a la velocidad nominal sin que Orca lo frene solo.
-    "sparse_infill_speed": "120",
-    "internal_solid_infill_speed": "120",
+    # Standard es el unico proceso cuyo principio de diseno es NO tocar nunca el
+    # techo de caudal del PLA: corre a la velocidad nominal y el auto-freno de
+    # Orca queda de red para los otros materiales. Draft es lo contrario, y esta
+    # documentado como tal: ahi el limite ES el caudal.
+    #
+    # Con el techo del PLA en 10 mm3/s, los nominales que respetan eso son:
+    #    110 x 0.45 x 0.20 = 9.90   relleno disperso
+    #    115 x 0.42 x 0.20 = 9.66   relleno solido
+    #    110 x 0.45 x 0.20 = 9.90   pared interior
+    #
+    # Estaban en 120, calculados contra el techo viejo de 11. Con 10 la maquina
+    # los ejecutaba igual a 111 y 119: el archivo decia una cosa y la impresora
+    # hacia otra. Bajar el nominal no imprime mas lento, hace que el numero
+    # escrito sea el numero que pasa. Cuando Max Flowrate de el techo real,
+    # estos tres suben con el.
+    "sparse_infill_speed": "110",
+    "internal_solid_infill_speed": "115",
     "top_surface_speed": "45",
     "gap_infill_speed": "45",
     "internal_bridge_speed": "80",
@@ -383,6 +435,12 @@ STANDARD = _proc("0.20mm Standard " + SUF, "0.20mm Standard @MyKlipper", {
     "bottom_shell_thickness": "0.6",
     "sparse_infill_density": "15%",
     "sparse_infill_pattern": "grid",
+    # Scarf joint. `conditional` hace que se aplique solo donde la pared es lo
+    # bastante lisa (angulo > 155 grados): en una esquina viva el scarf se ve
+    # peor que la costura normal, asi que ahi se abstiene.
+    "seam_slope_type": "external",
+    "seam_slope_conditional": "1",
+    "scarf_angle_threshold": "155",
 })
 
 # 0.20mm Strong: piezas funcionales. cubic en vez de grid porque a densidad alta
@@ -420,6 +478,19 @@ STRONG = _proc("0.20mm Strong " + SUF, "0.20mm Standard @MyKlipper", {
     "ensure_vertical_shell_thickness": "ensure_all",
     "infill_wall_overlap": "25%",
     "alternate_extra_wall": "0",
+    # Scarf joint. `conditional` hace que se aplique solo donde la pared es lo
+    # bastante lisa (angulo > 155 grados): en una esquina viva el scarf se ve
+    # peor que la costura normal, asi que ahi se abstiene.
+    "seam_slope_type": "external",
+    "seam_slope_conditional": "1",
+    "scarf_angle_threshold": "155",
+
+    # inner-outer-inner necesita 3 paredes o mas para significar algo: deposita
+    # la exterior apoyada contra material ya solido de los dos lados, lo que
+    # mejora precision y voladizos. Con wall_loops 2 (Fine, Standard, Draft) no
+    # hay tercera pared y el modo degenera al orden normal, asi que va solo
+    # aca, donde hay 4.
+    "wall_sequence": "inner-outer-inner wall",
 })
 
 # 0.28mm Draft: prototipos y piezas grandes. Limitado por caudal, no por
@@ -458,7 +529,10 @@ DRAFT = _proc("0.28mm Draft " + SUF, "0.28mm Extra Draft @MyKlipper", {
     "bottom_shell_thickness": "0.56",
     "sparse_infill_density": "10%",
     "sparse_infill_pattern": "grid",
-    "infill_combination": "1",
+    # infill_combination se queda en 0 (el valor de COMMON). Estaba en 1 y no
+    # hacia nada: combinar dos capas de 0.28 da 0.56 mm de altura, mas que el
+    # diametro del nozzle, asi que Orca no combina. Solo tendria efecto en un
+    # perfil de capa fina, donde 2 x altura entre en 0.4.
 })
 
 PROCESSES = [FINE, STANDARD, STRONG, DRAFT]
@@ -518,8 +592,24 @@ def _fil(name, inherits, ftype, extra):
 PLA = _fil("Printalot PLA " + SUF, "Generic PLA @System", "PLA", dict(
     _plates(60, 60),
     filament_density=["1.24"], filament_cost=["25"],
-    filament_flow_ratio=["0.98"], filament_max_volumetric_speed=["11"],
-    nozzle_temperature=["210"], nozzle_temperature_initial_layer=["215"],
+    # Caudal y temperatura son la misma variable vista de dos lados. El techo
+    # NO lo pone [extruder] max_temp 300: eso es un limite de seguridad de
+    # Klipper (lo que habilita ABS y PC), no cuanto plastico puede fundir el
+    # bloque por segundo. Lo que manda ahi es la potencia del calentador y el
+    # largo de la zona de fusion, que en el Sprite stock es corta.
+    #
+    # El PLA tiene ademas un techo propio del material: arriba de ~230 se
+    # degrada dentro del hotend. Por eso 215 y no mas.
+    #
+    # 10 y no 11 a proposito: el proceso Standard pide 10.8 mm3/s en el relleno
+    # (120 x 0.45 x 0.20). Contra un techo de 11 eso es el 98%, y el mecanismo
+    # de auto-freno de Orca solo protege si el numero que lo dispara es honesto:
+    # si el hotend real da 9, no frena nada y el relleno sub-extruye en
+    # silencio. Con 10 el freno actua (infill a 111 mm/s, ~1% de tiempo) y el
+    # perfil queda seguro de cuanto de la medicion. Cuando corras
+    # Calibration -> Max Flowrate, subi esto al valor medido.
+    filament_flow_ratio=["0.98"], filament_max_volumetric_speed=["10"],
+    nozzle_temperature=["215"], nozzle_temperature_initial_layer=["220"],
     nozzle_temperature_range_low=["190"], nozzle_temperature_range_high=["230"],
     temperature_vitrification=["55"],
     close_fan_the_first_x_layers=["1"], full_fan_speed_layer=["3"],
@@ -529,7 +619,7 @@ PLA = _fil("Printalot PLA " + SUF, "Generic PLA @System", "PLA", dict(
     pressure_advance=["0.04"],
     filament_notes=["Printalot PLA - 1.75mm\n"
                     "Perfil para Ender 3 S1 Pro + Klipper, nozzle 0.4.\n"
-                    "Caudal maximo 11 mm3/s (hotend bimetalico stock).\n"
+                    "Caudal maximo 10 mm3/s (hotend bimetalico stock, sin medir).\n"
                     "Chapa PEI lado LISO: 60 grados alcanza. Limpiar con alcohol isopropilico.\n"
                     "Pressure advance sugerido 0.04 (desactivado hasta calibrar)."],
 ))
@@ -561,7 +651,15 @@ ABS = _fil("Printalot ABS " + SUF, "Generic ABS @System", "ABS", dict(
     _plates(100, 100),
     filament_density=["1.04"], filament_cost=["30"],
     filament_flow_ratio=["0.98"], filament_max_volumetric_speed=["10"],
-    nozzle_temperature=["245"], nozzle_temperature_initial_layer=["250"],
+    # 255 y no 245. Sin encerramiento el modo de falla dominante del ABS no es
+    # el warp de la cama (eso lo tapa el brim) sino la DELAMINACION: la capa de
+    # abajo se enfria de mas antes de que llegue la de arriba y la pieza se
+    # abre por una linea horizontal. Mas calor por capa compensa el que se
+    # pierde al ambiente, y es la contramedida estandar. El material aguanta
+    # hasta ~270 y el hotend hasta 300, asi que 255 sobra de margen.
+    # El techo de caudal queda en 10: este margen se gasta entero en union de
+    # capas, no en velocidad.
+    nozzle_temperature=["255"], nozzle_temperature_initial_layer=["260"],
     nozzle_temperature_range_low=["230"], nozzle_temperature_range_high=["270"],
     temperature_vitrification=["100"], filament_shrink=["100.6%"],
     close_fan_the_first_x_layers=["3"], full_fan_speed_layer=["0"],
@@ -573,6 +671,8 @@ ABS = _fil("Printalot ABS " + SUF, "Generic ABS @System", "ABS", dict(
     pressure_advance=["0.05"],
     filament_notes=["Printalot ABS - 1.75mm. IMPRESORA SIN ENCERRAMIENTO\n"
                     "Ventilador practicamente apagado (0-15%) para evitar delaminado.\n"
+                    "Nozzle a 255, alto a proposito: sin caja la union entre capas es\n"
+                    "el punto debil, y el calor extra por capa es lo que la sostiene.\n"
                     "Obligatorio en el proceso: Brim tipo outer_only con 8mm de ancho.\n"
                     "Recomendado: Draft shield = enabled en piezas altas o finas.\n"
                     "Cerrar puertas y ventanas del ambiente, cero corriente de aire.\n"

@@ -81,13 +81,13 @@
         "0.98"
     ],
     "filament_max_volumetric_speed": [
-        "11"
+        "10"
     ],
     "nozzle_temperature": [
-        "210"
+        "215"
     ],
     "nozzle_temperature_initial_layer": [
-        "215"
+        "220"
     ],
     "nozzle_temperature_range_low": [
         "190"
@@ -129,6 +129,6 @@
         "0.04"
     ],
     "filament_notes": [
-        "Printalot PLA - 1.75mm\nPerfil para Ender 3 S1 Pro + Klipper, nozzle 0.4.\nCaudal maximo 11 mm3/s (hotend bimetalico stock).\nChapa PEI lado LISO: 60 grados alcanza. Limpiar con alcohol isopropilico.\nPressure advance sugerido 0.04 (desactivado hasta calibrar)."
+        "Printalot PLA - 1.75mm\nPerfil para Ender 3 S1 Pro + Klipper, nozzle 0.4.\nCaudal maximo 10 mm3/s (hotend bimetalico stock, sin medir).\nChapa PEI lado LISO: 60 grados alcanza. Limpiar con alcohol isopropilico.\nPressure advance sugerido 0.04 (desactivado hasta calibrar)."
     ]
 }

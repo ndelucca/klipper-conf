@@ -51,6 +51,7 @@ El criterio con el que está repartida la configuración:
      hardware.cfg       pines, sensores, PID, offsets del probe, geometria
      limits.cfg         [printer] [gcode_arcs] [exclude_object] [idle_timeout]
      macros.cfg         START_PRINT / END_PRINT / M0 / m300
+                        DESCARGAR_FILAMENTO / CALIBRAR_PID
      printer.cfg.example  plantilla del archivo mutable
      firmware/          binario del MCU y su build config
 ```
@@ -167,9 +168,26 @@ y borrado de archivos, y apagado. Este repo es público.
 
 ## Pendiente
 
-- **`[input_shaper]` sin calibrar.** Es el único cambio que falta para poder subir
-  `max_accel` de 2000. `versions/v3/limits.cfg` tiene el procedimiento anotado, y
-  `check` falla si alguien sube la aceleración sin haber configurado el shaper.
+En orden de impacto. El detalle de cada uno está en la sección 8 de
+`orca/docs/orcaslicer-ender3s1pro-klipper.md`.
+
+- **Caudal máximo sin medir.** El techo del PLA (10 mm³/s) es una estimación
+  conservadora, no una medición, y el mecanismo de auto-freno de OrcaSlicer solo
+  protege si ese número es real. Es lo único de esta lista que puede estar
+  afectando la calidad **ahora**. Sale de Calibration -> Max Flowrate.
+- **`[input_shaper]` sin calibrar.** Es el cambio que más rinde: `max_accel`
+  2000 es el techo contra el que están calibradas las aceleraciones de los 4
+  procesos, y lo que destraba no es la velocidad sino la *distancia de
+  aceleración*. Las secciones del acelerómetro USB están escritas y comentadas
+  en `versions/v3/hardware.cfg`; el procedimiento, en `limits.cfg`. `check`
+  falla si alguien sube la aceleración sin haber configurado el shaper.
 - **Pressure advance sin calibrar fino.** Los valores de `variable_pa` son
   conservadores y típicos de un direct drive. El óptimo real de cada rollo sale
   de Calibration -> Pressure Advance en OrcaSlicer.
+- **PID con los valores de fábrica.** El macro `CALIBRAR_PID` los mide a
+  temperatura real de trabajo. El resultado queda en `SAVE_CONFIG`, igual que el
+  `z_offset` y la malla.
+- **Compensaciones dimensionales sin medir.** `xy_hole_compensation` en 0 y
+  `elefant_foot_compensation` en 0.15 son genéricos. Están así a propósito: una
+  compensación mal puesta se aplica a todos los agujeros de todas las piezas.
+  Salen de Calibration -> Tolerance.

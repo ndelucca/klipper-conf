@@ -23,7 +23,7 @@
     "default_jerk": "0",
     "travel_speed": "250",
     "travel_speed_z": [
-        "5"
+        "10"
     ],
     "initial_layer_travel_speed": "100",
     "small_perimeter_speed": [
@@ -52,7 +52,7 @@
     "seam_position": "aligned",
     "staggered_inner_seams": "1",
     "seam_gap": "10%",
-    "seam_slope_type": "none",
+    "seam_slope_type": "external",
     "wipe_speed": "80%",
     "role_based_wipe_speed": "1",
     "infill_wall_overlap": "25%",
@@ -138,5 +138,8 @@
     "bottom_shell_thickness": "0.8",
     "sparse_infill_density": "40%",
     "sparse_infill_pattern": "cubic",
-    "alternate_extra_wall": "0"
+    "alternate_extra_wall": "0",
+    "seam_slope_conditional": "1",
+    "scarf_angle_threshold": "155",
+    "wall_sequence": "inner-outer-inner wall"
 }

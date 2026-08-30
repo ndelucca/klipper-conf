@@ -203,8 +203,9 @@ cada push.
 | Depende de | Dónde impacta |
 |---|---|
 | `[printer] max_accel` = 2000 | Todas las aceleraciones de los procesos están calibradas contra ese techo |
-| `[printer]` max_velocity, max_z_velocity, square_corner_velocity | Espejados en los machine limits del perfil de impresora |
-| Geometría de los steppers y del extruder | `printable_area`, `printable_height`, `nozzle_diameter` |
+| `[printer]` max_velocity, max_z_velocity, max_z_accel, square_corner_velocity | Espejados en los machine limits del perfil de impresora, y `max_z_velocity` además en el `travel_speed_z` de los 4 procesos |
+| Geometría de los steppers y del extruder | `printable_height`, `nozzle_diameter`. `printable_area` es el área útil de la **chapa** y solo tiene que *entrar* en el `position_max` del carro, que llega más lejos que el plato |
+| `[bed_mesh]` mesh_min / mesh_max | Fuera de ese rectángulo el Z está extrapolado. `check` avisa cuánta área imprimible queda sin dato medido |
 | `[gcode_arcs] resolution` <= 0.2 | Sin eso, `enable_arc_fitting` factea las curvas |
 | `[exclude_object]` | Los procesos activan `exclude_object` |
 | Las macros `START_PRINT` y `END_PRINT` | Son las que llama el start y end gcode, con sus parámetros |
@@ -226,3 +227,8 @@ exactamente qué valores subir después.
 El pressure advance ya lo pone Klipper (tabla `variable_pa` en `macros.cfg`), pero
 con valores conservadores. El óptimo de cada rollo sale de Calibration ->
 Pressure Advance.
+
+Y antes que los dos: **el techo de caudal del PLA no está medido**. Son 10 mm³/s
+estimados conservadores. Todo el mecanismo por el que 4 procesos alcanzan para 4
+materiales depende de que ese número sea real, así que Calibration -> Max
+Flowrate es el primer paso de la lista.

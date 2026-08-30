@@ -51,6 +51,19 @@ def _area(printable_area):
     return (max(xs) if xs else None), (max(ys) if ys else None)
 
 
+def _par(v):
+    """(x, y) de un valor Klipper tipo "20, 5"."""
+    if v is None:
+        return None
+    partes = str(v).split(",")
+    if len(partes) != 2:
+        return None
+    try:
+        return float(partes[0]), float(partes[1])
+    except ValueError:
+        return None
+
+
 def _gcode_macros(cfg):
     """{NOMBRE: cuerpo} de los gcode_macro definidos."""
     out = {}
@@ -126,11 +139,38 @@ def run(klipper_dir):
 
     # ------------------------------------------------------------------
     r.seccion("1. GEOMETRIA")
+    # printable_area es el area util de la CHAPA, no el recorrido del carro:
+    # el carro llega mas lejos que el plato. La relacion correcta es que el
+    # area declarada ENTRE en el recorrido, no que sea igual.
     ax, ay = _area(m["printable_area"])
-    r.igual("printable_area X = [stepper_x] position_max",
-            ax, klippercfg.num(cfg.get("stepper_x", {}).get("position_max")))
-    r.igual("printable_area Y = [stepper_y] position_max",
-            ay, klippercfg.num(cfg.get("stepper_y", {}).get("position_max")))
+    px = klippercfg.num(cfg.get("stepper_x", {}).get("position_max"))
+    py = klippercfg.num(cfg.get("stepper_y", {}).get("position_max"))
+    r.menor_igual("printable_area X <= [stepper_x] position_max", ax, px)
+    r.menor_igual("printable_area Y <= [stepper_y] position_max", ay, py)
+
+    # Cobertura de la malla. Fuera del rectangulo probado Klipper extrapola,
+    # asi que conviene saber cuanta area imprimible se queda sin dato real.
+    mesh = cfg.get("bed_mesh", {})
+    mn = _par(mesh.get("mesh_min"))
+    mx = _par(mesh.get("mesh_max"))
+    if mn and mx and ax and ay:
+        fuera = []
+        if mn[0] > 0:
+            fuera.append("X<%g" % mn[0])
+        if mx[0] < ax:
+            fuera.append("X>%g" % mx[0])
+        if mn[1] > 0:
+            fuera.append("Y<%g" % mn[1])
+        if mx[1] < ay:
+            fuera.append("Y>%g" % mx[1])
+        if fuera:
+            r.aviso("cobertura de [bed_mesh] vs printable_area",
+                    "Z extrapolado en %s (malla %g,%g -> %g,%g)"
+                    % (" y ".join(fuera), mn[0], mn[1], mx[0], mx[1]))
+        else:
+            r.ok("cobertura de [bed_mesh] vs printable_area",
+                 "la malla cubre toda el area imprimible")
+
     r.igual("printable_height = [stepper_z] position_max",
             _num(m["printable_height"]),
             klippercfg.num(cfg.get("stepper_z", {}).get("position_max")))
@@ -185,7 +225,7 @@ def run(klipper_dir):
                       kzvel)
 
     # ------------------------------------------------------------------
-    r.seccion("3. TERMICO")
+    r.seccion("3. TERMICO Y REFRIGERACION")
     kext = klippercfg.num(cfg.get("extruder", {}).get("max_temp"))
     kmin = klippercfg.num(cfg.get("extruder", {}).get("min_extrude_temp"), 170.0)
     kbed = klippercfg.num(cfg.get("heater_bed", {}).get("max_temp"))
@@ -210,6 +250,34 @@ def run(klipper_dir):
         if cama:
             r.menor_igual("cama de %s < [heater_bed] max_temp" % nom,
                           max(cama), kbed)
+
+    # El ventilador de pieza es un cruce real entre las dos mitades: el
+    # filamento pide un duty y [fan] decide si a ese duty el ventilador
+    # arranca. El ABS pide 15%, y un 4020 desde parado a 15% de PWM no gira:
+    # queda energizado, zumbando y sin mover aire.
+    print("")
+    fan = cfg.get("fan", {})
+    kick = klippercfg.num(fan.get("kick_start_time"), 0.1)
+    off = klippercfg.num(fan.get("off_below"), 0.0)
+    if kick >= 0.3:
+        r.ok("[fan] kick_start_time", "%g s, alcanza para arrancar a duty bajo" % kick)
+    else:
+        r.aviso("[fan] kick_start_time",
+                "%g s: a duty bajo el ventilador puede no arrancar" % kick)
+    for f in profiles.FILAMENTS:
+        pedidos = [_num(f[k]) for k in ("fan_min_speed", "fan_max_speed",
+                                        "overhang_fan_speed") if k in f]
+        pedidos = [v for v in pedidos if v is not None and v > 0]
+        if not pedidos:
+            continue
+        menor = min(pedidos) / 100.0
+        if menor < off - 1e-9:
+            r.falla("duty de ventilador de %s vs [fan] off_below" % f["name"],
+                    "pide %g%% pero off_below %g%% lo apaga: ese ajuste no existe"
+                    % (menor * 100, off * 100))
+        else:
+            r.ok("duty de ventilador de %s vs [fan] off_below" % f["name"],
+                 "minimo %g%% > off_below %g%%" % (menor * 100, off * 100))
 
     # ------------------------------------------------------------------
     r.seccion("4. FEATURES")
@@ -265,6 +333,46 @@ def run(klipper_dir):
         r.ok("carga de la malla", "la hace %s" % mac)
     else:
         r.falla("carga de la malla", "no la hace nadie; la malla guardada no se usa")
+
+    # Re-home de Z en caliente. El primer G28 referencia el Z con la cama a
+    # temperatura ambiente; para la primera capa la cama subio hasta 100 grados
+    # y el bloque otros 60, y todo eso dilata unas decimas. Si alguien saca el
+    # G28 Z posterior a la espera de temperatura, el z_offset vuelve a depender
+    # del material y nada avisa.
+    cuerpo = macros.get(mac, {}).get("gcode", "")
+    lineas = [l.split(";")[0].strip().upper() for l in cuerpo.splitlines()]
+    espera = [i for i, l in enumerate(lineas)
+              if l.startswith("M109") or l.startswith("M190")
+              or l.startswith("TEMPERATURE_WAIT")]
+    rehome = [i for i, l in enumerate(lineas)
+              if l.startswith("G28") and "Z" in l.replace("G28", "")]
+    if not espera:
+        r.aviso("re-home de Z en caliente", "%s no espera temperatura" % mac)
+    elif rehome and max(rehome) > max(espera):
+        r.ok("re-home de Z en caliente", "%s hace G28 Z despues de esperar" % mac)
+    else:
+        r.falla("re-home de Z en caliente",
+                "%s homea el Z solo en frio: el z_offset va a variar con el "
+                "material" % mac)
+
+    if "SET_GCODE_OFFSET" in cuerpo.upper():
+        r.ok("reset del gcode offset", "%s arranca desde el z_offset del config" % mac)
+    else:
+        r.aviso("reset del gcode offset",
+                "%s no resetea SET_GCODE_OFFSET: el babystep de la impresion "
+                "anterior sobrevive" % mac)
+
+    # Fade de la malla. Sin fade la correccion se suma al Z en TODAS las capas
+    # y una pieza alta reproduce la panza de la cama de punta a punta. Klipper
+    # deshabilita el fade cuando fade_end <= fade_start, que es el default.
+    fs = klippercfg.num(mesh.get("fade_start"), 1.0)
+    fe = klippercfg.num(mesh.get("fade_end"), 0.0)
+    if fe > fs:
+        r.ok("[bed_mesh] fade", "la malla se desvanece entre Z=%g y Z=%g" % (fs, fe))
+    else:
+        r.falla("[bed_mesh] fade",
+                "fade_end %g <= fade_start %g: la malla corrige a TODA altura"
+                % (fe, fs))
 
     # ------------------------------------------------------------------
     r.seccion("5. PRESSURE ADVANCE")

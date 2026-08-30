@@ -84,10 +84,10 @@
         "10"
     ],
     "nozzle_temperature": [
-        "245"
+        "255"
     ],
     "nozzle_temperature_initial_layer": [
-        "250"
+        "260"
     ],
     "nozzle_temperature_range_low": [
         "230"
@@ -141,6 +141,6 @@
         "0.05"
     ],
     "filament_notes": [
-        "Printalot ABS - 1.75mm. IMPRESORA SIN ENCERRAMIENTO\nVentilador practicamente apagado (0-15%) para evitar delaminado.\nObligatorio en el proceso: Brim tipo outer_only con 8mm de ancho.\nRecomendado: Draft shield = enabled en piezas altas o finas.\nCerrar puertas y ventanas del ambiente, cero corriente de aire.\nPiezas mayores a ~100mm van a warpear igual sin caja.\nCompensacion de contraccion 100.6%. El ABS emite VOC: ventilar despues."
+        "Printalot ABS - 1.75mm. IMPRESORA SIN ENCERRAMIENTO\nVentilador practicamente apagado (0-15%) para evitar delaminado.\nNozzle a 255, alto a proposito: sin caja la union entre capas es\nel punto debil, y el calor extra por capa es lo que la sostiene.\nObligatorio en el proceso: Brim tipo outer_only con 8mm de ancho.\nRecomendado: Draft shield = enabled en piezas altas o finas.\nCerrar puertas y ventanas del ambiente, cero corriente de aire.\nPiezas mayores a ~100mm van a warpear igual sin caja.\nCompensacion de contraccion 100.6%. El ABS emite VOC: ventilar despues."
     ]
 }

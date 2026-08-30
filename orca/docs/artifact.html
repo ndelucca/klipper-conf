@@ -375,7 +375,7 @@ footer{
   <p class="lede">Perfil completo de OrcaSlicer para nozzle 0.4: una impresora, cuatro procesos y cuatro filamentos Printalot, calibrados contra los límites reales que declara <code>printer.cfg</code>.</p>
   <dl class="specbar">
     <div><dt>OrcaSlicer</dt><dd>2.4.2</dd></div>
-    <div><dt>Área útil</dt><dd>250 × 235 × 270</dd></div>
+    <div><dt>Área útil</dt><dd>220 × 220 × 270</dd></div>
     <div><dt>Techo de accel</dt><dd>2000 mm/s²</dd></div>
     <div><dt>Perfiles</dt><dd>1 + 4 + 4</dd></div>
     <div><dt>Host</dt><dd>Moonraker</dd></div>
@@ -448,7 +448,7 @@ footer{
   <p>Leído directamente de <code>printer.cfg</code> y <code>macros.cfg</code> vía la API de Moonraker.</p>
 
   <div class="term"><pre> Cinemática        cartesian (bed slinger)
- Área útil         X 250 x Y 235 x Z 270 mm
+ Área útil         X 220 x Y 220 x Z 270 mm  (la chapa; el carro llega a 250x235)
  Extrusor          Sprite Pro direct drive, gear ratio 42:12
  Hotend            bimetálico, max_temp 300
  Cama              max_temp 110
@@ -459,8 +459,8 @@ footer{
  [printer]
    max_velocity        300 mm/s
    max_accel          2000 mm/s2      &lt;- techo real de todo el perfil
-   max_z_velocity        5 mm/s
-   max_z_accel         100 mm/s2
+   max_z_velocity       10 mm/s
+   max_z_accel         200 mm/s2
 
  [input_shaper]        NO CONFIGURADO
  pressure_advance      lo pone START_PRINT segun el material</pre></div>
@@ -537,7 +537,7 @@ footer{
   <div class="tblwrap"><table>
     <thead><tr><th>Ajuste</th><th>Valor</th><th>Por qué</th></tr></thead>
     <tbody>
-      <tr><td>Área imprimible</td><td class="n">250 × 235 mm</td><td>Corregido: antes decía 250×250 y el <code>position_max</code> de Y es 235</td></tr>
+      <tr><td>Área imprimible</td><td class="n">220 × 220 mm</td><td>Es el área útil de la <strong>chapa</strong>, no el recorrido del carro. <code>position_max</code> (250 × 235) dice hasta dónde llega el carro, y el carro llega más lejos que el plato: declarar 250 dejaba a Orca poner una pieza 30 mm al aire</td></tr>
       <tr><td>Altura</td><td class="n">270 mm</td><td></td></tr>
       <tr><td>Altura de capa</td><td class="n">0.08 – 0.32 mm</td><td>0.32 = 80 % del nozzle, el máximo sano para 0.4</td></tr>
       <tr><td>Tipo de extrusor</td><td class="n">Direct Drive</td><td>Sprite Pro</td></tr>
@@ -549,7 +549,7 @@ footer{
   <h3>Límites de máquina</h3>
   <p>Son un espejo exacto de <code>printer.cfg</code>. <strong>No mandan sobre la impresora</strong>: sirven para que la estimación de tiempo de Orca sea real. Antes decían 3000 de aceleración cuando Klipper hace 2000, y por eso el tiempo estimado mentía.</p>
   <div class="term"><pre> machine_max_speed_x / y            300 mm/s
- machine_max_speed_z                  5 mm/s
+ machine_max_speed_z                 10 mm/s
  machine_max_acceleration_x / y    2000 mm/s2
  machine_max_acceleration_z         100 mm/s2
  machine_max_jerk_x / y               5      (= square corner velocity de Klipper)</pre></div>
@@ -634,7 +634,7 @@ END_PRINT</pre></div>
  Desplazamiento            2000 mm/s2
  Primera capa               500 mm/s2
  Puentes                     50%  (= 1000)</pre></div>
-  <p><code>default_jerk</code> está en 0 a propósito: así Orca no toca el square corner velocity y lo maneja Klipper con su default de 5. Fine usa 800 mm/s² en pared exterior porque a 0.12 de capa el ringing se nota más.</p>
+  <p><code>default_jerk</code> está en 0 a propósito: así Orca no toca el square corner velocity y lo maneja Klipper con su default de 5. Fine usa 600 mm/s² en pared exterior y superficie superior en vez de 700, porque a 0.12 de capa el ringing se nota más. Draft va al revés: 1000, porque prioriza tiempo.</p>
 
   <h3>Ajustes de calidad activados</h3>
   <div class="tblwrap"><table>
@@ -672,11 +672,11 @@ END_PRINT</pre></div>
   <div class="tblwrap"><table>
     <thead><tr><th></th><th class="n">PLA</th><th class="n">PETG</th><th class="n">ABS</th><th class="n">TPU Flex</th></tr></thead>
     <tbody>
-      <tr><td>Nozzle</td><td class="n">210</td><td class="n">240</td><td class="n">245</td><td class="n">230</td></tr>
-      <tr><td>Primera capa</td><td class="n">215</td><td class="n">245</td><td class="n">250</td><td class="n">230</td></tr>
+      <tr><td>Nozzle</td><td class="n">215</td><td class="n">240</td><td class="n">255</td><td class="n">230</td></tr>
+      <tr><td>Primera capa</td><td class="n">220</td><td class="n">245</td><td class="n">260</td><td class="n">230</td></tr>
       <tr><td>Cama</td><td class="n">60</td><td class="n">70</td><td class="n">100</td><td class="n">45</td></tr>
       <tr><td>Rango sugerido</td><td class="n">190–230</td><td class="n">220–260</td><td class="n">230–270</td><td class="n">210–240</td></tr>
-      <tr><td>Caudal máximo</td><td class="n">11 mm³/s</td><td class="n">9 mm³/s</td><td class="n">10 mm³/s</td><td class="n">3.5 mm³/s</td></tr>
+      <tr><td>Caudal máximo</td><td class="n">10 mm³/s</td><td class="n">9 mm³/s</td><td class="n">10 mm³/s</td><td class="n">3.5 mm³/s</td></tr>
       <tr><td>Flow ratio</td><td class="n">0.98</td><td class="n">0.95</td><td class="n">0.98</td><td class="n">1.00</td></tr>
       <tr><td>Ventilador min/max</td><td class="n">100 / 100</td><td class="n">40 / 60</td><td class="n">0 / 15</td><td class="n">50 / 80</td></tr>
       <tr><td>Capas sin ventilador</td><td class="n">1</td><td class="n">2</td><td class="n">3</td><td class="n">1</td></tr>
@@ -731,22 +731,22 @@ END_PRINT</pre></div>
 
   <h3>Proceso Standard contra cada material</h3>
   <div class="gauges">
-    <div class="gauge"><span class="lbl">PLA · techo 11</span><span class="track"><span class="fill" style="width:98%"></span><span class="ceil" style="left:100%"></span></span><span class="val">10.8 ok</span></div>
+    <div class="gauge"><span class="lbl">PLA · techo 10</span><span class="track"><span class="fill" style="width:100%"></span><span class="ceil" style="left:100%"></span></span><span class="val">frena a 111</span></div>
     <div class="gauge"><span class="lbl">ABS · techo 10</span><span class="track"><span class="fill over" style="width:100%"></span><span class="ceil" style="left:92.6%"></span></span><span class="val">frena</span></div>
     <div class="gauge"><span class="lbl">PETG · techo 9</span><span class="track"><span class="fill over" style="width:100%"></span><span class="ceil" style="left:83.3%"></span></span><span class="val">frena</span></div>
     <div class="gauge"><span class="lbl">TPU · techo 3.5</span><span class="track"><span class="fill over" style="width:100%"></span><span class="ceil" style="left:32.4%"></span></span><span class="val">frena</span></div>
   </div>
   <p class="figcap">La barra es el caudal que pide el proceso Standard (10.8 mm³/s). La línea vertical es el techo que declara cada filamento. Donde la barra pasa la línea, Orca reduce la velocidad de esa feature.</p>
 
-  <p>Por eso Standard está afinado para que en <strong>PLA no toque nunca el techo</strong>: pico de 10.8 contra un límite de 11. Corre a la velocidad nominal, y para los demás materiales el freno automático hace el resto.</p>
+  <p>Antes el techo del PLA decía 11 y Standard estaba afinado para pedir 10.8: el 98&nbsp;%, sin tocar nunca el límite. Sonaba elegante y era frágil, porque ese 11 nunca se midió. <strong>El auto-freno solo protege si el número que lo dispara es honesto</strong>: con un techo optimista Orca no frena y el relleno sub-extruye sin dar síntoma. Ahora el techo es 10 y Standard sí lo toca: el relleno baja de 120 a 111&nbsp;mm/s, un ~1&nbsp;% de tiempo, y el perfil queda correcto dé lo que dé la medición.</p>
 
   <div class="tblwrap"><table>
-    <thead><tr><th>Proceso</th><th class="n">Pico</th><th class="n">PLA (11)</th><th class="n">PETG (9)</th><th class="n">ABS (10)</th><th class="n">TPU (3.5)</th></tr></thead>
+    <thead><tr><th>Proceso</th><th class="n">Pico</th><th class="n">PLA (10)</th><th class="n">PETG (9)</th><th class="n">ABS (10)</th><th class="n">TPU (3.5)</th></tr></thead>
     <tbody>
       <tr><td>0.12mm Fine</td><td class="n">7.6</td><td class="n"><span class="chip ok">ok</span></td><td class="n"><span class="chip ok">ok</span></td><td class="n"><span class="chip ok">ok</span></td><td class="n"><span class="chip slow">frena</span></td></tr>
-      <tr><td>0.20mm Standard</td><td class="n">10.8</td><td class="n"><span class="chip ok">ok</span></td><td class="n"><span class="chip slow">frena</span></td><td class="n"><span class="chip slow">frena</span></td><td class="n"><span class="chip slow">frena</span></td></tr>
+      <tr><td>0.20mm Standard</td><td class="n">10.8</td><td class="n"><span class="chip slow">frena</span></td><td class="n"><span class="chip slow">frena</span></td><td class="n"><span class="chip slow">frena</span></td><td class="n"><span class="chip slow">frena</span></td></tr>
       <tr><td>0.20mm Strong</td><td class="n">9.9</td><td class="n"><span class="chip ok">ok</span></td><td class="n"><span class="chip slow">frena</span></td><td class="n"><span class="chip ok">ok</span></td><td class="n"><span class="chip slow">frena</span></td></tr>
-      <tr><td>0.28mm Draft</td><td class="n">10.8</td><td class="n"><span class="chip ok">ok</span></td><td class="n"><span class="chip slow">frena</span></td><td class="n"><span class="chip slow">frena</span></td><td class="n"><span class="chip slow">frena</span></td></tr>
+      <tr><td>0.28mm Draft</td><td class="n">10.8</td><td class="n"><span class="chip slow">frena</span></td><td class="n"><span class="chip slow">frena</span></td><td class="n"><span class="chip slow">frena</span></td><td class="n"><span class="chip slow">frena</span></td></tr>
     </tbody>
   </table></div>
   <p><span class="chip slow">frena</span> no es un error: es el sistema funcionando. Significa que el proceso pide más caudal del que ese material tolera y Orca lo ajusta solo.</p>
@@ -802,8 +802,8 @@ END_PRINT</pre></div>
       <tr><td><code>max_accel</code> en Klipper</td><td class="n">2000</td><td class="n">4000</td></tr>
       <tr><td><code>default_acceleration</code></td><td class="n">2000</td><td class="n">4000</td></tr>
       <tr><td><code>inner_wall_acceleration</code></td><td class="n">2000</td><td class="n">4000</td></tr>
-      <tr><td><code>outer_wall_acceleration</code></td><td class="n">1000</td><td class="n">2500</td></tr>
-      <tr><td><code>top_surface_acceleration</code></td><td class="n">1000</td><td class="n">2500</td></tr>
+      <tr><td><code>outer_wall_acceleration</code></td><td class="n">700</td><td class="n">2500</td></tr>
+      <tr><td><code>top_surface_acceleration</code></td><td class="n">700</td><td class="n">2500</td></tr>
       <tr><td><code>travel_acceleration</code></td><td class="n">2000</td><td class="n">5000</td></tr>
       <tr><td><code>initial_layer_acceleration</code></td><td class="n">500</td><td class="n">500 · no tocar</td></tr>
       <tr><td><code>outer_wall_speed</code> (Standard)</td><td class="n">60</td><td class="n">90</td></tr>
@@ -920,7 +920,7 @@ END_PRINT</pre></div>
     <thead><tr><th>Decisión</th><th>Motivo</th></tr></thead>
     <tbody>
       <tr><td>Aceleraciones a 2000 y no más</td><td>Es el <code>max_accel</code> real de tu <code>printer.cfg</code>. Pedir más solo hace que la estimación de tiempo mienta</td></tr>
-      <tr><td>Pared exterior a 1000 mm/s²</td><td>Sin input shaper, la mitad del techo es lo que mantiene las esquinas limpias</td></tr>
+      <tr><td>Pared exterior a 700 mm/s²</td><td>Sin input shaper, la mitad del techo es lo que mantiene las esquinas limpias</td></tr>
       <tr><td>4 procesos y no 4×4 por material</td><td>El techo de caudal del filamento hace el ajuste por material automáticamente</td></tr>
       <tr><td>Perfiles que heredan en vez de autocontenidos</td><td>Sobreviven a las actualizaciones de OrcaSlicer</td></tr>
       <tr><td><code>compatible_printers</code> en todo</td><td>Listas limpias: solo ves lo que aplica a esta impresora</td></tr>
