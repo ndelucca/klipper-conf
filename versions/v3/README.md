@@ -17,8 +17,9 @@ Klipper escribe solo.
  hardware.cfg         pines, sensores, PID, offsets, geometria, nivelacion, buzzer
  limits.cfg           [printer] [gcode_arcs] [exclude_object] [idle_timeout]
  macros.cfg           START_PRINT / END_PRINT / M0 / m300 / CALIBRAR_*
- moonraker.conf       la tercera mitad. Referencia versionada, todavia NO
-                      la despliega el rol de Ansible
+ moonraker.conf       la tercera mitad. La despliega el mismo rol, pero con
+                      handler y verificacion propios: reiniciar Moonraker tira
+                      abajo la API con la que el rol verifica todo lo demas
 ```
 
 El criterio del corte: **`limits.cfg` es todo lo que tiene un espejo del lado de
@@ -73,7 +74,7 @@ de 250. Entra, pero sin margen.
 | Purga | `Z0.28` fijo | `Z{LAYER}` | La línea existe para juzgar la primera capa y se imprimía un 40 % más alta que ella: daba una lectura optimista de lo único que sirve para diagnosticarla |
 | `CALIBRAR_EXTRUSOR` | no existía | macro nuevo | `rotation_distance` sigue en `26.359`, el valor genérico de Klipper para esta placa. Max Flowrate y Flow Rate miden encima de él |
 | `CALIBRAR_PID_NOZZLE` | sin nota | documenta el caso ABS | El PID medido con el fan al 100 % tiene ganancia alta, y el ABS imprime con el fan casi apagado. Es una elección —gana el PLA— y ahora está escrita como tal |
-| `moonraker.conf` | fuera del repo | `versions/v3/` | Es la pieza que conecta las dos mitades: `[octoprint_compat]` es lo único que hace funcionar el `host_type: octoprint` del perfil de Orca, y `check` ahora valida ese par |
+| `moonraker.conf` | fuera del repo | `versions/v3/`, y desplegado | Es la pieza que conecta las dos mitades: `[octoprint_compat]` es lo único que hace funcionar el `host_type: octoprint` del perfil de Orca, y `check` ahora valida ese par. El rol `klipper_config` lo despliega por un camino propio, porque reiniciar Moonraker no es lo mismo que reiniciar Klipper |
 
 ## Firmware del MCU
 

@@ -54,8 +54,8 @@ El criterio con el que está repartida la configuración:
      macros.cfg         START_PRINT / END_PRINT / M0 / m300
                         DESCARGAR_FILAMENTO / CALIBRAR_EXTRUSOR
                         CALIBRAR_PID_NOZZLE / CALIBRAR_PID_CAMA
-     moonraker.conf     la tercera mitad. Referencia versionada; todavia NO
-                        la despliega el rol de Ansible
+     moonraker.conf     la tercera mitad. La despliega el mismo rol, con
+                        handler y verificacion propios
      printer.cfg.example  plantilla del mutable, con las semillas de
                         control/PID y z_offset
      firmware/          binario del MCU y su build config
