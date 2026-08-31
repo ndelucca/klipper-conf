@@ -177,7 +177,7 @@ oscilación queda dentro de la malla.
 
 ```
  1.  SCREWS_TILT_CALCULATE                    girar y repetir hasta 00:00-00:05
- 2.  CALIBRAR_PID_NOZZLE            ~5 min    pitido -> SAVE_CONFIG -> M107
+ 2.  CALIBRAR_PID_NOZZLE            ~5 min    pitido -> SAVE_CONFIG
  3.  CALIBRAR_PID_CAMA             ~10 min    pitido -> SAVE_CONFIG
  4.  CALIBRAR_EXTRUSOR             ~2 min     marcar a 120 mm ANTES; medir y
                                               editar rotation_distance

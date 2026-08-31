@@ -80,6 +80,31 @@ class TestMacroParams(unittest.TestCase):
         self.assertEqual(klippercfg.macro_params("G28\nG1 Z10"), set())
 
 
+class TestMacroOptionalParams(unittest.TestCase):
+
+    def test_un_param_con_default_es_opcional(self):
+        body = "{% set X = params.BED_TEMP|default(60)|float %}"
+        self.assertEqual(klippercfg.macro_optional_params(body), {"BED_TEMP"})
+
+    def test_un_param_sin_default_no_lo_es(self):
+        body = "{% set X = params.BED_TEMP|float %}{% set Y = params.OTRO %}"
+        self.assertEqual(klippercfg.macro_optional_params(body), set())
+
+    def test_tolera_espacios_alrededor_del_filtro(self):
+        body = "{ params.SOAK | default(90) }"
+        self.assertEqual(klippercfg.macro_optional_params(body), {"SOAK"})
+
+    def test_basta_un_uso_sin_default_para_dejar_de_ser_opcional(self):
+        # El default de la primera aparicion no protege a la segunda: si el
+        # laminador no manda el parametro, la segunda rompe el macro igual.
+        body = "{ params.X|default(1) } y despues { params.X }"
+        self.assertEqual(klippercfg.macro_optional_params(body), set())
+
+    def test_no_confunde_un_filtro_que_no_es_default(self):
+        body = "{ params.X|defaultish(1) }"
+        self.assertEqual(klippercfg.macro_optional_params(body), set())
+
+
 class TestLoadDir(TempDirCase):
 
     def test_reporta_los_archivos_que_faltan(self):

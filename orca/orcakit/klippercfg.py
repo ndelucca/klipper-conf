@@ -139,9 +139,9 @@ def load_dir(path: Path | str, files: tuple[str, ...] = MANAGED_FILES) -> Loaded
     return LoadedConfig(config, missing, clashes)
 
 
-def macro_params(body: str) -> set[str]:
-    """Nombres de params.X que lee un cuerpo de gcode_macro."""
-    out: set[str] = set()
+def _param_refs(body: str) -> list[tuple[str, int]]:
+    """(nombre, índice justo después del nombre) de cada `params.X` del cuerpo."""
+    out: list[tuple[str, int]] = []
     mark = "params."
     i = 0
     while (i := body.find(mark, i)) >= 0:
@@ -150,5 +150,35 @@ def macro_params(body: str) -> set[str]:
         while j < len(body) and (body[j].isalnum() or body[j] == "_"):
             j += 1
         if j > i:
-            out.add(body[i:j])
+            out.append((body[i:j], j))
+        i = j
     return out
+
+
+def macro_params(body: str) -> set[str]:
+    """Nombres de params.X que lee un cuerpo de gcode_macro."""
+    return {name for name, _ in _param_refs(body)}
+
+
+def macro_optional_params(body: str) -> set[str]:
+    """Los params.X que el macro lee con un `|default(...)` en TODAS sus usos.
+
+    La diferencia decide si que el laminador no mande un parámetro es un bug o
+    una decisión. Sin default, un parámetro ausente rompe el macro en tiempo de
+    impresión; con default, es la máquina eligiendo sola, que es justo lo que se
+    quiere para las cosas que son de la máquina y no del gcode (el soak, por
+    ejemplo). Antes las dos cosas eran el mismo aviso.
+    """
+    optional: dict[str, bool] = {}
+    for name, end in _param_refs(body):
+        rest = body[end:].lstrip()
+        has_default = False
+        if rest.startswith("|"):
+            rest = rest[1:].lstrip()
+            # El nombre del filtro tiene que terminar acá: sin esto, un
+            # `|defaultish(...)` cuenta como default y el parámetro pasa por
+            # opcional sin serlo.
+            if rest.startswith("default"):
+                has_default = rest[len("default"):].lstrip().startswith("(")
+        optional[name] = optional.get(name, True) and has_default
+    return {name for name, ok in optional.items() if ok}

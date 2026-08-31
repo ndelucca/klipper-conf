@@ -321,14 +321,26 @@ def _features(r: Report, m: Machine, cfg: Config,
         r.fail(f"machine_start_gcode llama a {start}", "el macro no existe")
         return None
 
-    read = klippercfg.macro_params(macros[start].get("gcode", ""))
+    body_start = macros[start].get("gcode", "")
+    read = klippercfg.macro_params(body_start)
+    optional = klippercfg.macro_optional_params(body_start)
+    # Que el macro lea un parámetro que Orca no manda puede ser dos cosas muy
+    # distintas, y antes las dos eran el mismo aviso. Sin `|default(...)` el
+    # macro se rompe en tiempo de impresión: eso es una incoherencia. Con
+    # default es la máquina decidiendo sola, que es deliberado para lo que es de
+    # la máquina y no del gcode (SOAK, que sale de BED_TEMP igual que la malla).
+    solo_macro = read - params
     if params - read:
         r.fail(f"parámetros de {start}",
                f"Orca manda {sorted(params - read)} que el macro no lee")
-    elif read - params:
-        r.warn(f"parámetros de {start}",
-               f"el macro lee {sorted(read - params)} que Orca no manda "
-               f"(usa el default)")
+    elif solo_macro - optional:
+        r.fail(f"parámetros de {start}",
+               f"el macro exige {sorted(solo_macro - optional)} sin default y "
+               f"Orca no lo manda: falla en tiempo de impresión")
+    elif solo_macro:
+        r.ok(f"parámetros de {start}",
+             f"{', '.join(sorted(params))} "
+             f"(+ {', '.join(sorted(solo_macro))}: los decide la máquina)")
     else:
         r.ok(f"parámetros de {start}", ", ".join(sorted(params)))
 

@@ -248,7 +248,7 @@ cientos de oportunidades por capa de que no lo tape.
 
 ```gcode
 ; machine_start_gcode
-START_PRINT BED_TEMP=[bed_temperature_initial_layer_single] EXTRUDER_TEMP=[nozzle_temperature_initial_layer] MATERIAL=[filament_type] LAYER=[initial_layer_print_height] SOAK=90
+START_PRINT BED_TEMP=[bed_temperature_initial_layer_single] EXTRUDER_TEMP=[nozzle_temperature_initial_layer] MATERIAL=[filament_type] LAYER=[initial_layer_print_height]
 
 ; layer_change_gcode
 ;AFTER_LAYER_CHANGE
@@ -275,34 +275,44 @@ de la máquina, no del laminador. `orca.py check` falla si nadie la carga.
 son tres parámetros, pero del otro lado el macro hace bastante más:
 
 ```
- M107 / CLEAR_PAUSE / M220 S100 / M221 S100 / SET_GCODE_OFFSET Z=0
-                                             higiene: el fan puede haber
-                                             quedado soplando, el estado de
-                                             pausa puede haber sobrevivido, los
-                                             sliders de velocidad y flujo de
-                                             Mainsail sobreviven de una
-                                             impresión a la siguiente, y el
-                                             babystep de la anterior no debe
-                                             filtrarse a esta
- TEMPERATURE_WAIT MINIMUM=150                espera por temperatura, no por
-                                             reloj. Ojo: M109 S150 NO sirve,
-                                             porque Klipper espera a que la
-                                             temperatura converja desde
-                                             cualquier lado y con el nozzle a
-                                             210 se quedaría esperando a que
-                                             BAJE
- G28                                         homing (Z todavía en frío)
+ chequeo del sensor de filamento             lo primero de todo: sin filamento
+                                             no se enciende nada. Antes se
+                                             descubría en la primera extrusión
+                                             de la purga, seis minutos después
+ M107 / CLEAR_PAUSE / M220 / M221 /          higiene: todo lo que sobrevive de
+ SET_GCODE_OFFSET X Y Z /                    una impresión a la siguiente y que
+ SET_VELOCITY_LIMIT /                        nadie limpia. El fan soplando, el
+ SET_FILAMENT_SENSOR ENABLE=1                estado de pausa, los sliders de
+                                             velocidad y flujo de Mainsail, el
+                                             babystep de la anterior, un límite
+                                             de velocidad pisado a mano, y el
+                                             sensor de filamento que apagaste
+                                             una vez y quedó apagado
+ M104 S150 / M140                            precalentamiento EN PARALELO, sin
+                                             esperarlo. Acá hubo un
+                                             TEMPERATURE_WAIT MINIMUM=150 que
+                                             no hacía nada: no hay extrusión
+                                             hasta el M190, el G28 palpa con el
+                                             BLTouch, y el G28 Z en caliente
+                                             descarta el valor de este homing
+ G28 / G1 Z20                                homing (Z todavía en frío) y
+                                             parqueo bajo, porque el G28 Z de
+                                             abajo baja desde acá
  M190                                        LA CAMA PRIMERO, SOLA. Ver abajo
- G4 P<SOAK>                                  soak de cama. Ver abajo
- M104 / M109                                 recién ahora el nozzle final
+ G4 <SOAK-45> / M104 final / G4 45           soak de cama, PARTIDO: el nozzle
+                                             sube durante la cola. Ver abajo
+ M109                                        vuelve enseguida
  G28 Z                                       RE-HOME EN CALIENTE. Ver abajo
  BED_MESH_PROFILE LOAD=<pla|petg|abs>        la malla que corresponde a la
                                              temperatura de cama anunciada
  SET_PRESSURE_ADVANCE                        según el MATERIAL anunciado
  G1 Z10 / G1 X8 Y10                          reposicionar ANTES de bajar
  purga en X=8, a Z=<LAYER>                   borde de la chapa, dentro de la
-                                             malla, y a la altura de la primera
-                                             capa del proceso
+                                             malla, a la altura de la primera
+                                             capa del proceso y con el caudal
+                                             que corresponde a esa altura
+ tirón + hop                                 corta el hilo antes de devolverle
+                                             el control al laminador
 ```
 
 **La cama primero, sola.** El `M104` al valor final estaba antes del `M190`, y
@@ -318,14 +328,36 @@ termistor está pegado abajo de la chapa: es exactamente el motivo por el que el
 procedimiento de `BED_MESH_CALIBRATE` exige esperar 10 minutos antes de palpar.
 Sin la espera, el `G28 Z` de abajo referencia el Z sobre una cama a mitad de
 camino y después carga una malla que **sí** se midió en equilibrio: las dos
-referencias del Z no corresponden al mismo estado térmico del aluminio. El
-default es 90 s y cubre PLA y PETG; el ABS quiere bastante más.
+referencias del Z no corresponden al mismo estado térmico del aluminio.
+
+El `SOAK` **no** lo manda el laminador. Sale de la misma escalera de `BED_TEMP`
+que elige la malla —90 s para PLA, 150 para PETG, 420 para ABS— porque es la
+misma pregunta: qué régimen térmico es este. Estuvo clavado en `SOAK=90` desde
+Orca mientras la malla se elegía sola, o sea dos respuestas a una sola pregunta,
+y la clavada era la equivocada: el ABS hacía 90 s de soak y después cargaba la
+malla medida en equilibrio a 100 °C. El macro sigue leyendo `SOAK=` como
+override si hace falta para un caso puntual.
+
+El dwell va **partido en dos**, con el `M104` al valor final metido en los
+últimos 45 s. El argumento de "la cama siempre tarda más" vale para la rampa de
+la cama, no para el soak: ahí la cama ya está en target y lo único que pasa es
+que el aluminio se equaliza, así que los ~35 s de 150→215 se pagaban enteros y
+en serie.
 
 **La altura de la purga.** Estuvo fija en `Z0.28` mientras los procesos imprimen
 la primera capa a 0.20 (0.25 en Draft). Esa línea existe para juzgar la primera
 capa, y a 0.28 salía redondeada aunque el `z_offset` estuviera 0.05 mm alto: daba
 una lectura optimista justo de lo que sirve para diagnosticar. Ahora la altura
 llega por parámetro, y `check` valida que el laminador la mande.
+
+**Y el caudal, que es la otra mitad del mismo argumento.** Con un `E10` fijo el
+área depositada es constante, así que el ancho real de la línea depende de la
+altura: 0.97 mm a 0.20 y 1.57 mm a 0.12, contra los ~0.42 de una línea real. Una
+línea sobre-extruida al 230 % se ve bien aunque el `z_offset` esté alto, porque
+el material de sobra tapa la falta de aplastamiento: el mismo defecto de lectura
+que el 0.28, por el otro eje, y peor justo en el perfil Fine. Ahora el `E` sale
+de `LAYER` para un ancho objetivo de 0.6 mm, y las dos pasadas quedan tangentes
+en vez de una encima de la otra.
 
 El `G28 Z` en caliente es el que más rinde de esa lista. El primer `G28` ocurre
 con la cama a temperatura ambiente y el nozzle a 150; para cuando se imprime la

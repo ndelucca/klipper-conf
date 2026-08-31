@@ -42,7 +42,7 @@
 # La malla no esta aca porque no la necesita: [bed_mesh default] es una seccion
 # que no existe en ningun include, asi que SAVE_CONFIG la escribe sin conflicto.
 #
-#   CALIBRAR_PID_NOZZLE   -> pitido -> SAVE_CONFIG -> M107
+#   CALIBRAR_PID_NOZZLE   -> pitido -> SAVE_CONFIG
 #   CALIBRAR_PID_CAMA     -> pitido -> SAVE_CONFIG
 #   PROBE_CALIBRATE       -> TESTZ Z=-0.05 ... -> ACCEPT -> SAVE_CONFIG
 

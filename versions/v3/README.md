@@ -76,6 +76,49 @@ de 250. Entra, pero sin margen.
 | `CALIBRAR_PID_NOZZLE` | sin nota | documenta el caso ABS | El PID medido con el fan al 100 % tiene ganancia alta, y el ABS imprime con el fan casi apagado. Es una elección —gana el PLA— y ahora está escrita como tal |
 | `moonraker.conf` | fuera del repo | `versions/v3/`, y desplegado | Es la pieza que conecta las dos mitades: `[octoprint_compat]` es lo único que hace funcionar el `host_type: octoprint` del perfil de Orca, y `check` ahora valida ese par. El rol `klipper_config` lo despliega por un camino propio, porque reiniciar Moonraker no es lo mismo que reiniciar Klipper |
 
+### La tanda del arranque
+
+Una revisión completa de `START_PRINT`, mirando tres cosas a la vez: si el orden
+tiene sentido, cuánto tiempo se va en cosas que no hacen nada, y si cada decisión
+sigue en pie después de los cambios que vinieron *después* de tomarla. Los dos
+hallazgos grandes son de la tercera clase: código que era correcto cuando se
+escribió y que quedó obsoleto por un cambio posterior, sin que nadie volviera.
+
+| Qué | Antes | Ahora | Por qué |
+|---|---|---|---|
+| Espera de precalentamiento | `TEMPERATURE_WAIT SENSOR=extruder MINIMUM=150` | sin espera; el `M104 S150` queda | **El re-home en caliente la volvió obsoleta y nadie volvió a mirarla.** Desde que existe el `G28 Z` posterior, el *valor* del primer `G28` se descarta: lo único que le queda a ese homing frío es establecer un sistema de coordenadas, así que todo lo que se gaste en hacerlo preciso es desperdicio por construcción. Y el motivo declarado tampoco se sostenía: entre esa línea y el `M190` no hay ninguna extrusión, el `G28` palpa con el BLTouch, y un nozzle frío no chorrea — la espera *creaba* la condición de goteo que decía evitar. En caliente volvía al instante. No hacía nada en ninguno de los dos casos, y costaba ~45 s |
+| Nozzle a temperatura final | después del soak entero | en los últimos 45 s del soak | El argumento de "la cama siempre tarda más" vale para la **rampa** de la cama, no para el soak: ahí la cama ya está en target y sólo se equaliza el aluminio. Los ~35 s de 150→215 se pagaban enteros, en serie. El precio es 45 s de goteo a temperatura final contra los 2-10 minutos que motivaron bajar el `M104`, y la purga lo barre |
+| Parqueo durante el calentamiento | `G1 Z50` | `G1 Z20` | El `G28 Z` en caliente arranca desde donde quedó el carro, y baja a `homing_speed`. Los 30 mm de más se pagan dos veces, subiéndolos y bajándolos: ~6 s |
+| `[stepper_z] homing_speed` | ausente, o sea `5` | `10`, con `second_homing_speed: 5` | El último suelto del `max_z_velocity` viejo, y el más caro de los tres. Es la velocidad del primer descenso de cada `G28 Z`, y hay dos por impresión. La precisión la da el segundo toque, que ahora va explícito en 5 — la misma velocidad con la que `[bltouch] speed` mide los 81 puntos de la malla |
+| Caudal de la purga | `E10` fijo | derivado de `LAYER`, ancho objetivo 0.6 mm | **La otra mitad del arreglo de `Z{LAYER}`, que quedó sin hacer.** Con `E` fijo el área depositada es constante, así que el ancho real depende de la altura: 0.97 mm a 0.20 y 1.57 mm a 0.12, contra los ~0.42 de una línea real. Una línea sobre-extruida al 230 % se ve bien aunque el `z_offset` esté alto, porque el material de sobra tapa la falta de aplastamiento: exactamente la lectura optimista que motivó cambiar el 0.28, por el otro eje, y peor justo en el perfil Fine |
+| Separación de las dos líneas de purga | `X8.0` → `X8.3` | `X8.0` → `X8.6` | 0.3 mm de separación contra una línea de casi 1 mm: la segunda pasada se imprimía **encima** de la primera y el par dejaba de ser legible como dos líneas |
+| Final de la purga | terminaba apoyado y presurizado | tirón rápido + hop de 0.6 | El primer travel del laminador arrastraba el hilo por toda la bandeja. Sin retracción neta a propósito: Orca no sabe que el macro retrajo y no emite la de-retracción, así que los primeros ~13 mm de la pieza saldrían huecos |
+| `SOAK` | `SOAK=90` desde Orca, para todo | escalera 90 / 150 / 420 por `BED_TEMP`, en el macro | Eran **dos respuestas a una sola pregunta**: la malla se elegía sola por `BED_TEMP` mientras el soak venía clavado desde el laminador. La que estaba clavada era la equivocada — el ABS hacía 90 s de soak y después cargaba la malla medida en equilibrio a 100 °C, o sea el defecto que el soak existe para tapar, sin tapar, justo en el material donde la primera capa decide si la pieza se pega. Sale del contrato con Orca; el macro lo sigue aceptando como override |
+| Pre-flight | ninguno | aborta si el sensor no ve filamento | Con `pause_on_runout`, mandar una impresión sin filamento no fallaba: calentaba la cama, hacía el soak entero y recién se pausaba en la primera extrusión de la purga, seis minutos después. El sensor ya sabía la respuesta antes de encender un solo calentador |
+| Higiene de arranque | `M107`, `CLEAR_PAUSE`, `M220`, `M221`, `SET_GCODE_OFFSET Z` | `+ X` e `Y`, `SET_VELOCITY_LIMIT`, `SET_FILAMENT_SENSOR ENABLE=1` | Los tres miembros que faltaban de la misma familia: cosas que sobreviven de una impresión a la siguiente y que nadie limpia. El del sensor es el que más muerde — lo apagás una vez para un print raro y queda apagado para siempre, en silencio, en una máquina donde el runout es la única red de seguridad de una impresión de ocho horas. Los límites de velocidad se leen del config, no se escriben en el macro: duplicarlos sería un tercer lugar donde el mismo número puede desincronizarse |
+| Fallback de pressure advance | `.get(MATERIAL, 0.04)` mudo | avisa | Un `PLA-CF` o `PETG-CF` caía al valor del PLA en silencio. El resto del macro dice siempre lo que hizo |
+| `END_PRINT`, altura del wipe | `Z0.2` y después `X5 Y5` | `Z2` y después el wipe | Limpiaba la pieza a 0.2 mm de altura: menos que cualquier curvatura, blob o hilo de la última capa |
+| `END_PRINT` / `M0`, subidas de Z | relativas, sin clamp | clampeadas contra `position_max` | Sobre una pieza de más de ~258 mm el `G1 Z10` relativo se pasaba de rango y Klipper abortaba el macro dejando los calentadores prendidos: justo lo que `END_PRINT` existe para evitar. Mismo problema en `M0`, que además aborta con el `PAUSE` ya hecho y el carro sin apartar |
+| `END_PRINT`, presentar la pieza | `G1 X0 Y220` sin `F` | con `F3000` | Heredaba el feedrate de la línea anterior: la velocidad con la que la máquina presenta la pieza dependía de con cuál hubiera subido el Z |
+| `M107` después del PID | a mano, si te acordabas | lo hace `AVISO_PID` | `CALIBRAR_PID_NOZZLE` no puede apagar el ventilador que él mismo prendió, porque nada de lo que va después de `PID_CALIBRATE` se ejecuta. El vigía que ya existe para avisar corre justo ahí y con la guarda correcta |
+| `PAUSE` / `CANCEL_PRINT` | defaults de `mainsail.cfg` | `[gcode_macro _CLIENT_VARIABLE]` | No existía el bloque, así que corrían con `park_at_cancel: False`: una impresión cancelada dejaba el nozzle exactamente donde estaba, sobre la pieza, hasta que se enfriaba solo. Y cancelar es lo que hacés cuando ves que algo salió mal, o sea con la pieza abajo del nozzle. De paso `runout_sensor`, para que `RESUME` no reanude sin filamento |
+| `check`, parámetros del start gcode | un aviso para todo | falla si falta uno **sin** default | Que el macro lea un parámetro que Orca no manda son dos cosas muy distintas: sin `|default(...)` el macro se rompe en tiempo de impresión, con default es la máquina decidiendo sola. Antes eran el mismo aviso, así que ninguna de las dos se veía |
+
+Las cuatro primeras filas suman **unos 90 s** de un arranque en frío de PLA que
+estaba en torno a los 6 minutos, sin tocar ninguna decisión de calidad. Los
+números son estimaciones a partir de `homing_speed`, `max_z_velocity` y las
+rampas térmicas; el que más varía con la máquina es el de la espera de 150.
+
+En sentido contrario, un arranque de ABS ahora tarda **7 minutos más**: es el
+soak que le faltaba. Se puede acortar mandando `SOAK=` desde el gcode de Orca
+para un caso puntual, pero el default es el que corresponde al material.
+
+Lo que **no** se tocó, y por qué: el `G28` completo del principio sigue palpando
+el Z en frío aunque ese valor se descarte. Un `G28 X Y` ahorraría otros ~12 s,
+pero pierde el `z_hop` de `safe_z_home` antes de mover en XY: si una impresión
+anterior murió con el nozzle apoyado, arrastra. Es el precio de la seguridad y
+está bien pagado.
+
 ## Firmware del MCU
 
 Sin cambios respecto de v2: el binario es el mismo (`klipper_v2.bin`, MD5

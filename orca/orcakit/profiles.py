@@ -74,22 +74,27 @@ BASE_IDS = {
 # estuviera 0.05 alto: daba una lectura optimista justo de lo que sirve para
 # diagnosticar.
 #
-# SOAK es el tiempo que START_PRINT espera despues de que M190 vuelve, antes
-# del re-home en caliente. M190 vuelve cuando el TERMISTOR toca el target, y
-# ese termistor esta pegado abajo de la chapa: es el mismo motivo por el que el
-# procedimiento de BED_MESH_CALIBRATE exige esperar antes de palpar. Sin esto,
-# la referencia de Z se toma sobre una cama a mitad de camino y despues se
-# carga una malla que si se midio en equilibrio.
+# SOAK ya NO se manda desde aca, y esa ausencia es la decision.
 #
-# 90 s cubre PLA y PETG. El ABS quiere bastante mas; cuando haga falta por
-# material, Orca acepta el ternario de PrusaSlicer y esto pasa a ser
-# SOAK={filament_type[0]=="ABS"?480:90} sin espacios, para que `check` lo siga
-# leyendo como un solo parametro.
+# Es el tiempo que START_PRINT espera despues de que M190 vuelve, antes del
+# re-home en caliente: M190 vuelve cuando el TERMISTOR toca el target, y ese
+# termistor esta pegado abajo de la chapa, asi que sin la espera la referencia
+# de Z se toma sobre una cama a mitad de camino y despues se carga una malla
+# que si se midio en equilibrio.
+#
+# Estuvo clavado en SOAK=90 mientras el macro elegia la malla solo, por
+# BED_TEMP. Eran dos respuestas a una sola pregunta -que regimen termico es
+# este- y la que estaba clavada era la equivocada: el ABS hacia 90 s de soak y
+# despues cargaba la malla medida en equilibrio a 100 grados.
+#
+# Ahora la escalera vive una sola vez, en el macro, junto a la que elige la
+# malla. El macro sigue leyendo SOAK= como override, asi que se puede volver a
+# mandar desde aca para un caso puntual; `check` sabe que es opcional porque lo
+# lee con un |default(...).
 START = ("START_PRINT BED_TEMP=[bed_temperature_initial_layer_single] "
          "EXTRUDER_TEMP=[nozzle_temperature_initial_layer] "
          "MATERIAL=[filament_type] "
-         "LAYER=[initial_layer_print_height] "
-         "SOAK=90\n")
+         "LAYER=[initial_layer_print_height]\n")
 
 MACHINE = Machine(
     name=PRINTER,
