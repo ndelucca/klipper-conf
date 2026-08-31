@@ -132,12 +132,23 @@ def _macros(cfg: Config) -> dict[str, dict[str, str]]:
             if sec.startswith("gcode_macro ")}
 
 
-def _call(gcode: str | None) -> tuple[str | None, set[str]]:
-    """(macro, {parámetros}) de la primera línea de un start/end gcode."""
-    lines = (gcode or "").strip().splitlines()
-    if not lines or not (parts := lines[0].split()):
-        return None, set()
-    return parts[0], {p.split("=", 1)[0] for p in parts[1:] if "=" in p}
+def _call(gcode: str | None,
+          known: set[str] | None = None) -> tuple[str | None, set[str]]:
+    """(macro, {parámetros}) de la línea que llama al macro.
+
+    `known` son los gcode_macro definidos. Sin él se lee la primera línea no
+    vacía, que es lo que valía cuando un start gcode era exactamente una
+    llamada. Desde que el perfil antepone el `M140`/`M104` que el laminador
+    tiene que ver (regla del preámbulo, más abajo), la llamada ya no es la
+    primera línea y leerla a ciegas devolvía "M140".
+    """
+    for line in (gcode or "").strip().splitlines():
+        if not (parts := line.split(";")[0].split()):
+            continue
+        if known is not None and parts[0] not in known:
+            continue
+        return parts[0], {p.split("=", 1)[0] for p in parts[1:] if "=" in p}
+    return None, set()
 
 
 def _temps(f: Filament, keys: tuple[str, ...]) -> list[float]:
@@ -316,7 +327,7 @@ def _features(r: Report, m: Machine, cfg: Config,
     else:
         r.ok("enable_arc_fitting", "apagado en todos los procesos")
 
-    start, params = _call(m.machine_start_gcode)
+    start, params = _call(m.machine_start_gcode, set(macros))
     if start not in macros:
         r.fail(f"machine_start_gcode llama a {start}", "el macro no existe")
         return None
@@ -344,6 +355,27 @@ def _features(r: Report, m: Machine, cfg: Config,
     else:
         r.ok(f"parámetros de {start}", ", ".join(sorted(params)))
 
+    # El laminador decide si emite SUS PROPIOS comandos de temperatura buscando
+    # M104/M109 y M140/M190 literales en el machine_start_gcode. Sin ellos los
+    # mete por delante de la llamada al macro, y ahí se rompen tres cosas de
+    # golpe: el pre-flight del macro deja de correr antes de encender nada, el
+    # `M104 S150` pasa de precalentar en paralelo a ENFRIAR desde el target que
+    # ya puso el laminador, y nada de eso falla de forma visible porque la pieza
+    # sale igual. Es el tipo de contrato que solo se ve en el gcode laminado,
+    # que es justamente lo único que este repo no puede leer.
+    pre = (m.machine_start_gcode or "").split(start)[0].upper()
+    falta = [q for q, mc in (("cama", ("M140", "M190")),
+                             ("nozzle", ("M104", "M109")))
+             if not any(c in pre for c in mc)]
+    if falta:
+        r.fail("preámbulo de temperaturas del start gcode",
+               f"sin un M140/M104 literal antes de {start}, el laminador emite "
+               f"los suyos por delante del macro (falta: {', '.join(falta)})")
+    else:
+        r.ok("preámbulo de temperaturas del start gcode",
+             f"M140 y M104 literales antes de {start}: el laminador no inserta "
+             f"los suyos")
+
     # Moonraker implementa la API de OctoPrint via [octoprint_compat], y el
     # perfil de impresora declara host_type: octoprint porque Orca no tiene un
     # tipo "moonraker". Sin esa sección, todo lo demás valida y el botón de
@@ -360,7 +392,7 @@ def _features(r: Report, m: Machine, cfg: Config,
                    "el perfil habla OctoPrint pero moonraker.conf no declara "
                    "[octoprint_compat]")
 
-    end, _ = _call(m.machine_end_gcode)
+    end, _ = _call(m.machine_end_gcode, set(macros))
     if end in macros:
         r.ok(f"machine_end_gcode llama a {end}", "el macro existe")
     else:

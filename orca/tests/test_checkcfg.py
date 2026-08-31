@@ -40,6 +40,24 @@ class TestHelpers(unittest.TestCase):
         self.assertEqual(checkcfg._call(""), (None, set()))
         self.assertEqual(checkcfg._call(None), (None, set()))
 
+    def test_call_saltea_el_preambulo_de_temperaturas(self):
+        # Regresion: el start gcode antepone un M140/M104 para que el laminador
+        # no inserte los suyos, asi que la llamada al macro dejo de ser la
+        # primera linea. Sin la lista de macros conocidos, `_call` devolvia
+        # "M140" y todo lo que cuelga del nombre del macro fallaba en cascada.
+        gcode = ("M140 S60\n"
+                 "M104 S150\n"
+                 "START_PRINT BED_TEMP=[x] MATERIAL=[y]\n")
+        self.assertEqual(checkcfg._call(gcode)[0], "M140")
+        macro, params = checkcfg._call(gcode, {"START_PRINT", "END_PRINT"})
+        self.assertEqual(macro, "START_PRINT")
+        self.assertEqual(params, {"BED_TEMP", "MATERIAL"})
+
+    def test_call_ignora_comentarios_y_lineas_en_blanco(self):
+        macro, _ = checkcfg._call("\n; un comentario\n\nEND_PRINT\n",
+                                  {"END_PRINT"})
+        self.assertEqual(macro, "END_PRINT")
+
 
 class TestTermico(unittest.TestCase):
     """El filamento pide temperaturas y duty de ventilador; la máquina decide

@@ -230,6 +230,7 @@ cada push.
 | Las macros `START_PRINT` y `END_PRINT` | Son las que llama el start y end gcode, con sus parámetros |
 | `variable_pa` en `START_PRINT` | Es quien pone el pressure advance; los valores de cada filamento tienen que coincidir |
 | `max_temp` del hotend y de la cama | Techo de las temperaturas de cada filamento |
+| Un `M140` y un `M104` **literales** antes de la llamada al macro | OrcaSlicer decide si emitir *sus propios* comandos de temperatura buscando esos códigos en el `machine_start_gcode`. Sin ellos los inserta por delante del macro, y el pre-flight de filamento deja de correr antes de encender nada. No fija ninguna temperatura: el macro sigue siendo el dueño |
 
 Si alguna deja de cumplirse, `check` falla diciendo exactamente cuál y con qué
 valores de cada lado.
@@ -263,3 +264,39 @@ Del lado de la máquina hay dos pasos previos que no cuestan un peso y que
 condicionan todo lo demás: nivelar con `SCREWS_TILT_CALCULATE` (que mide, en vez
 del método del papel) y recalibrar la malla **con la cama caliente**. Son A1 y A2
 de la sección 8.
+
+### El cuarto vértice que falta
+
+Los tres verificadores cierran un triángulo: `build --check` compara
+repo↔fuente, `verify` compara repo↔instalado y `check` compara repo↔Klipper.
+Ninguno toca el **esquema de OrcaSlicer**, así que un valor con el *tipo*
+equivocado pasa los tres y solo se ve en el log de arranque de la app.
+
+Hay un caso concreto abierto. Siete claves de proceso se serializan como array
+mientras todas las demás velocidades del mismo JSON son escalares:
+
+```
+ enable_overhang_speed              overhang_totally_speed
+ initial_layer_travel_acceleration  small_perimeter_speed
+ travel_speed_z                     small_perimeter_threshold
+```
+
+Algunas de esas **sí** son vectores en OrcaSlicer (`enable_overhang_speed` lo es
+en versiones recientes), así que pasarlas a escalar a ciegas rompería lo que hoy
+funciona. La única evidencia disponible es un `returned substitutions 0` de una
+validación vieja. Para verificarlo:
+
+```sh
+python orca/orca.py install
+# abrir OrcaSlicer y mirar el log de arranque
+grep -i 'substitution\|load config' <data>/log/*.log
+```
+
+`returned substitutions 0` significa que Orca aceptó **todas** las claves y
+**todos** los valores tal cual, sin corregir ni descartar ninguno. Si aparece un
+número distinto de cero, ahí están las claves a arreglar.
+
+El cierre definitivo sería un `orca.py lint` que compare los tipos de nuestras
+claves contra los perfiles de sistema de la instalación. Es el único de los
+cuatro que necesita una instalación de OrcaSlicer presente, y por eso no puede
+correr en CI como los otros tres.

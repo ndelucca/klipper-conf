@@ -113,11 +113,61 @@ En sentido contrario, un arranque de ABS ahora tarda **7 minutos más**: es el
 soak que le faltaba. Se puede acortar mandando `SOAK=` desde el gcode de Orca
 para un caso puntual, pero el default es el que corresponde al material.
 
+**Y ese soak tiene un costo que no es tiempo.** `G4` en Klipper es
+`toolhead.dwell()`, y el hilo que procesa g-code se queda adentro **sosteniendo
+el mutex del dispatcher** hasta que el *print time* alcanza al reloj. Un
+`CANCEL_PRINT` o un `PAUSE` que entran por la API de Moonraker esperan ese
+mutex: con `SOAK=420`, la máquina queda **sorda a Mainsail durante más de seis
+minutos**, justo en el material que más ganas dan de cancelar temprano. Con los
+90 s viejos el peor caso eran 45 s y no se notaba.
+
+No tiene arreglo limpio. Partir el dwell en trozos no ayuda —es el mismo
+mutex— y un `[delayed_gcode]` no puede pausar un archivo que se está
+streameando. La única vía durante ese tramo es `M112`, que Klipper atiende por
+fuera del dispatcher. Se acepta a sabiendas, y el pre-flight de filamento ya
+mata la causa más común de querer cancelar en los primeros minutos.
+
 Lo que **no** se tocó, y por qué: el `G28` completo del principio sigue palpando
 el Z en frío aunque ese valor se descarte. Un `G28 X Y` ahorraría otros ~12 s,
 pero pierde el `z_hop` de `safe_z_home` antes de mover en XY: si una impresión
 anterior murió con el nozzle apoyado, arrastra. Es el precio de la seguridad y
 está bien pagado.
+
+### La tanda de la revisión externa
+
+Una auditoría completa de las dos mitades, mirando el conjunto en vez de un
+archivo por vez. Los hallazgos se reparten en tres clases: defectos de
+seguridad que nadie había buscado porque el modo de falla es raro, contratos
+con software de terceros que no verifica nadie, y valores que quedaron en su
+default de fábrica sin que se tomara una decisión.
+
+| Qué | Antes | Ahora | Por qué |
+|---|---|---|---|
+| Ventilador en ABS | `fan_min_speed: 0`, `fan_max_speed: 15` | `15` / `15`, sin rampa | Dos claves de la máquina hacían que la rampa no existiera igual, y peor. `[fan] kick_start_time: 0.5` larga el ventilador a **100 %** medio segundo cada vez que sube desde cero, y con mínimo 0 el modelo de refrigeración de Orca cruza el cero cada vez que cambia el tiempo de capa: medio segundo de aire a full sobre ABS sin encerramiento, repetido, que es exactamente la perturbación que todo ese perfil existe para evitar. Y `off_below: 0.10` apagaba entero cualquier duty entre 1 % y 9 %, o sea que la mitad de abajo de la rampa no se ejecutaba nunca. Con 15/15 se paga **un** kick, en la capa 4 |
+| Techo de la guarda de pausa | se re-armaba cada hora, para siempre | 4 h, y después apaga solo el hotend | La guarda no apagaba nada estando pausada, que es correcto para un `RESUME`, pero sin techo dejaba de ser una red de seguridad justo para el único caso en que hace falta: un runout desatendido a la madrugada deja el hotend a 255 °C indefinidamente. Se apaga **solo el hotend** —el que degrada filamento parado en la zona de fusión— y quedan la cama y los motores, así que el `RESUME` sigue siendo válido. Que la cama quede prendida es una elección |
+| `min_temp` de los dos calentadores | `0` | `5` | Klipper apaga cuando la lectura cae **por debajo** de `min_temp`, así que un `min_temp` de 0 le está pidiendo a la falla que sea negativa: un termistor que se abre lee cerca de cero y puede quedarse ahí, del lado permitido. Venía del config de fábrica de Creality |
+| `max_extrude_cross_section` | sin declarar (`0.64 mm²`) | `1.0` | El modo de falla es abortar la impresión **en el medio** con *Move exceeds maximum extrusion*. Hoy nada se le acerca (la purga pide 0.111, el cordón más ancho es 0.14 en Draft), pero un pico de gap fill de Arachne sobre un segmento corto no sale de ninguna clave del perfil y por lo tanto no lo predice ningún verificador de este repo. 1.0 son 2.5× el cordón más ancho, no el 5 de cargo-cult |
+| Sensores de temperatura | ninguno | `[temperature_sensor]` de MCU y de la Pi | Este repo justifica varias decisiones —arcos a 0.2, gyroid, planchado— por la carga que le meten al planificador de Klipper en una 3B+ que corre en Python, y esa carga era un argumento **sin instrumento**. El throttling térmico de una 3B+ no se manifiesta como error sino como tartamudeo en el relleno, que se parece a un problema de extrusión y se diagnostica en el lugar equivocado |
+| `PRE` (cola del soak con el nozzle subiendo) | fijo en 45 s | derivado de `EXTRUDER_TEMP` | El bloque sube ~1.9 K/s: 150→215 son ~34 s y 150→255 son ~55. Con 45 fijo, la promesa de que "el nozzle llega justo cuando el aluminio termina de asentarse" valía solo para PLA — en ABS el `M109` se comía el resto en serie, que es lo que este reparto existe para evitar, y en PLA sobraban 10 s de goteo a temperatura final |
+| Cebado de la purga | lo hacían las dos líneas | `G1 E6` estacionario, antes de bajar | La contracara del arreglo de caudal de la tanda anterior: al dejar de sobre-extruir, las dos líneas pasaron de 20 mm de filamento a 12 (a 0.20) y **7.4** (a 0.12). Después de un soak la zona de fusión viene vaciada por el goteo, y con 7.4 mm el nozzle puede no re-presurizar antes de que termine la primera línea — justo en Fine. La salida no es volver a subir `PE`, que reintroduciría la lectura optimista recién eliminada, sino separar las dos funciones que compartían una línea |
+| Preámbulo de temperaturas del start gcode | ninguno | `M140` + `M104 S150` literales | **Un contrato con el laminador que no miraba nadie.** OrcaSlicer decide si emitir *sus propios* comandos de temperatura buscando `M104/M109` y `M140/M190` literales en el `machine_start_gcode`. Sin ellos los mete por delante de la llamada al macro, y ahí el pre-flight de filamento deja de correr antes de encender nada, y el `M104 S150` pasa de precalentar en paralelo a **enfriar** desde el target que ya puso el laminador (25 → 220 → 150 → 220). Nada de eso falla de forma visible: la pieza sale igual. Las dos líneas no le sacan la decisión a nadie —el macro las repite tres líneas después— existen para que el laminador **vea** que ya están |
+| Evitar cruzar paredes | solo en Fine | también en Standard y Strong | Cada travel que atraviesa un perímetro exterior deja cicatriz en la única superficie que se ve. Standard paga 3 paredes e `inner-outer-inner` con criterio de calidad primero y después ahorraba justo acá. Draft se queda sin él: existe para ir rápido |
+| Límite del rodeo | `0` en todos | `50%` | En Orca, `max_travel_detour_distance = 0` **no** significa "sin rodeo": significa rodeo **sin límite**. O sea que Fine, que ya evitaba cruzar paredes, venía aceptando cualquier desvío, incluidos los patológicos. Los dos parámetros van juntos y solo uno estaba puesto |
+| Ángulo del planchado | sin declarar (`-1` = el del relleno superior) | `0` | El nozzle planchaba **paralelo** a los cordones, recorriendo sus propios valles en vez de cruzarlos: el peor ángulo posible para lo que el planchado hace. Con `infill_direction` en 45, un 0 cruza a 45° |
+| Planchado de Standard | `0.15` / `30 mm/s` | `0.2` / `60 mm/s` | El comentario decía "cuesta tiempo solo en caras superiores", cierto pero suena barato: son **37 min por cada 100 × 100 mm** de cara superior, contra 7 con los valores nuevos. 0.2 sigue siendo el doble de solape sobre una línea de 0.4, y 60 mm/s no es temerario porque el planchado casi no extruye: lo limita el ringing, no el caudal, y `top_surface_acceleration` ya está en 700. Fine se queda en 0.15/30 |
+| `[stepper_z] homing_speed` | `10`, sin nota | `10`, con la nota | Es **exactamente** el techo que recomienda la doc de Klipper para un BLTouch: el límite, no un exceso, pero sin margen arriba. Queda escrito que si aparece un *failed to verify sensor state* o un `z_offset` que baila, éste es el primer número que se baja |
+| `_CLIENT_VARIABLE`, modos de falla | solo el silencioso | los dos | Además del rename de una variable —que no da error y deja ganar al default de mainsail—, si un update de mainsail-config alguna vez **descomenta** su propio bloque, Klipper aborta con sección duplicada. Ruidoso e inmediato, o sea el bueno. El párrafo anterior dejaba la impresión de que todos los caminos eran silenciosos |
+| `check`, llamada al macro | leía la primera línea | busca la línea que llama a un macro conocido | Consecuencia del preámbulo: la llamada dejó de ser la primera línea y `_call` devolvía `M140`, con todo lo que cuelga del nombre del macro fallando en cascada |
+
+**Lo que se miró y se dejó como está.** Siete claves de proceso se serializan
+como array (`["1000"]`) mientras el resto de las velocidades del mismo JSON son
+escalares: `enable_overhang_speed`, `initial_layer_travel_acceleration`,
+`overhang_totally_speed`, `small_perimeter_speed`, `small_perimeter_threshold`,
+`travel_speed_z`. Pasarlas a escalar a ciegas puede romper las que en Orca **sí**
+son vectores, y ninguno de los tres verificadores puede decidirlo: `build --check`
+compara repo↔fuente, `verify` compara repo↔instalado y `check` compara
+repo↔Klipper. Los tres cierran un triángulo que no toca nunca el **esquema de
+OrcaSlicer**. Queda anotado en `orca/README.md` con cómo verificarlo.
 
 ## Firmware del MCU
 

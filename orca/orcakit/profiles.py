@@ -91,7 +91,28 @@ BASE_IDS = {
 # malla. El macro sigue leyendo SOAK= como override, asi que se puede volver a
 # mandar desde aca para un caso puntual; `check` sabe que es opcional porque lo
 # lee con un |default(...).
-START = ("START_PRINT BED_TEMP=[bed_temperature_initial_layer_single] "
+# EL PREAMBULO DE DOS LINEAS NO ES DECORACION, Y NO FIJA NADA.
+#
+# OrcaSlicer decide si emitir SUS PROPIOS comandos de temperatura buscando
+# M104/M109 y M140/M190 LITERALES en este texto. Sin ellos los inserta por
+# delante de la llamada al macro, y ahi se caen tres cosas de golpe:
+#
+#   - el pre-flight de filamento de START_PRINT deja de correr "antes de
+#     encender nada": aborta con la cama ya en target y el nozzle tambien, y
+#     action_raise_error no los apaga.
+#   - el `M104 S150` del macro deja de ser un precalentamiento en paralelo y
+#     pasa a ser un ENFRIAMIENTO desde el target que puso el laminador. El
+#     nozzle hace 25 -> 220 -> 150 -> 220.
+#   - nada de eso falla. El soak es tiempo de reloj, la malla se carga igual y
+#     la pieza sale bien, asi que no hay sintoma que delate el problema.
+#
+# Las dos lineas de abajo son exactamente lo que el macro va a volver a hacer
+# tres lineas despues, asi que no le sacan la decision a nadie: existen para
+# que el laminador VEA que ya estan y no ponga las suyas. `orca.py check`
+# valida que sigan ahi, porque borrarlas no rompe nada visible.
+START = ("M140 S[bed_temperature_initial_layer_single]\n"
+         "M104 S150\n"
+         "START_PRINT BED_TEMP=[bed_temperature_initial_layer_single] "
          "EXTRUDER_TEMP=[nozzle_temperature_initial_layer] "
          "MATERIAL=[filament_type] "
          "LAYER=[initial_layer_print_height]\n")
@@ -397,8 +418,18 @@ COMMON = Process(
     enable_prime_tower="0",
     timelapse_type="0",
     print_sequence="by layer",
+    # El evitado de paredes se prende por proceso (Fine, Standard, Strong), no
+    # aca: Draft existe para ir rapido y el rodeo es tiempo.
+    #
+    # Pero el LIMITE del rodeo si es comun, y tiene que estar puesto donde el
+    # evitado se prenda. En Orca, max_travel_detour_distance = 0 NO significa
+    # "sin rodeo": significa rodeo SIN LIMITE. O sea que Fine, que ya tenia
+    # reduce_crossing_wall en 1, venia aceptando cualquier desvio con tal de no
+    # cruzar un perimetro, incluyendo los patologicos. 50% acota el desvio a la
+    # mitad del camino directo, que es donde deja de compensar: mas que eso es
+    # mas oozing y mas tiempo que la cicatriz que estas evitando.
     reduce_crossing_wall="0",
-    max_travel_detour_distance="0",
+    max_travel_detour_distance="50%",
     infill_combination="0",
 )
 
@@ -460,10 +491,16 @@ FINE = replace(
     # inercia y va sobre la superficie que menos perdona.
     #
     # Cuesta tiempo SOLO en caras superiores: no toca el resto de la pieza.
+    # El angulo si se corrige, igual que en Standard: sin declarar vale -1, o
+    # sea el mismo que el relleno superior, y el nozzle plancha paralelo a los
+    # cordones en vez de cruzarlos. Con infill_direction en 45, un 0 cruza a 45
+    # grados. Eso no cuesta tiempo; el spacing y la velocidad si, y aca no se
+    # tocan a proposito.
     ironing_type="top",
     ironing_flow="10%",
     ironing_speed="30",
     ironing_spacing="0.15",
+    ironing_angle="0",
     # Scarf joint. `conditional` hace que se aplique solo donde la pared es lo
     # bastante lisa (angulo > 155 grados): en una esquina viva el scarf se ve
     # peor que la costura normal, asi que ahi se abstiene.
@@ -539,6 +576,12 @@ STANDARD = replace(
     # Una capa de 0.2 de aire.
     support_top_z_distance="0.2",
     support_bottom_z_distance="0.2",
+    # Cruce de paredes. Cada travel que atraviesa un perimetro exterior deja
+    # una cicatriz o un punto en la unica superficie que se ve, y este es el
+    # perfil de todos los dias con criterio de calidad primero: paga 3 paredes
+    # e inner-outer-inner y despues ahorraba justo aca. Fine ya lo tenia.
+    # El limite del rodeo esta en COMMON, y los dos van juntos.
+    reduce_crossing_wall="1",
     # Planchado de la cara superior. Es la mitad que faltaba: monotonicline
     # ordena las pasadas y only_one_wall_top saca la costura del medio, pero
     # entre linea y linea sigue quedando el valle del propio cordon. El
@@ -548,16 +591,30 @@ STANDARD = replace(
     # ultima capa del objeto. `all solid` tambien plancharia las solidas
     # internas, que nadie ve, y es tiempo tirado.
     #
-    # flow 10% es material apenas suficiente para llenar los valles sin
-    # acumular; spacing 0.15 es solape agresivo a proposito (el objetivo es
-    # fundir, no depositar); speed 30 porque el planchado es sensible a la
-    # inercia y va sobre la superficie que menos perdona.
+    # EL ANGULO ES EL ARREGLO. Sin declarar vale -1, que en Orca significa "el
+    # mismo que el relleno superior", o sea que el nozzle planchaba PARALELO a
+    # los cordones, recorriendo sus propios valles en vez de cruzarlos. Es el
+    # peor angulo posible para lo que el planchado hace. Con infill_direction
+    # en 45, un 0 cruza a 45 grados.
     #
-    # Cuesta tiempo SOLO en caras superiores: no toca el resto de la pieza.
+    # Y el costo estaba muy por encima de lo que decia el comentario viejo
+    # ("cuesta tiempo SOLO en caras superiores", cierto pero suena barato):
+    #
+    #   cara superior de 100 x 100 mm     pasadas   tiempo
+    #     spacing 0.15  speed 30            667     37 min   <- estaba asi
+    #     spacing 0.20  speed 60            500      7 min
+    #
+    # 0.2 sigue siendo el doble de solape sobre una linea de 0.4, y 60 mm/s no
+    # es temerario: el planchado casi no extruye, asi que no lo limita el
+    # caudal sino el ringing, y top_surface_acceleration ya esta en 700.
+    #
+    # Fine se queda en 0.15 / 30: ese es el perfil de calidad a cualquier
+    # precio, y ahi el tiempo no es el criterio.
     ironing_type="top",
     ironing_flow="10%",
-    ironing_speed="30",
-    ironing_spacing="0.15",
+    ironing_speed="60",
+    ironing_spacing="0.2",
+    ironing_angle="0",
     # Scarf joint. `conditional` hace que se aplique solo donde la pared es lo
     # bastante lisa (angulo > 155 grados): en una esquina viva el scarf se ve
     # peor que la costura normal, asi que ahi se abstiene.
@@ -609,6 +666,11 @@ STRONG = replace(
     # tres dimensiones, que es lo que se quiere de un perfil que existe para
     # que la pieza aguante carga y no para que se vea bien.
     sparse_infill_pattern="cubic",
+    # Igual que Standard. Strong existe para que la pieza aguante, no para que
+    # se vea, pero con 4 paredes cada cruce de travel cae sobre una pared que
+    # ademas es gruesa: la cicatriz queda igual y el rodeo es proporcionalmente
+    # mas barato que en un perfil de pared fina.
+    reduce_crossing_wall="1",
     ensure_vertical_shell_thickness="ensure_all",
     infill_wall_overlap="25%",
     alternate_extra_wall="0",
@@ -851,8 +913,24 @@ ABS = replace(
     nozzle_temperature=("255",), nozzle_temperature_initial_layer=("260",),
     nozzle_temperature_range_low=("230",), nozzle_temperature_range_high=("270",),
     temperature_vitrification=("100",), filament_shrink=("100.6%",),
+    # EL MINIMO ES 15 Y NO 0, o sea que el ventilador no tiene rampa: arranca
+    # en la capa 4 y se queda plano. No es pereza, son dos cosas de la maquina
+    # que hacian que la rampa no existiera igual, y peor:
+    #
+    #   [fan] kick_start_time 0.5 -> Klipper larga el ventilador a 100% medio
+    #     segundo cada vez que sube desde CERO. Con minimo 0 y maximo 15, el
+    #     modelo de refrigeracion de Orca cruza el cero cada vez que cambia el
+    #     tiempo de capa: cada cruce es medio segundo de aire a full sobre una
+    #     pieza de ABS sin encerramiento, que es exactamente la perturbacion
+    #     que todo este perfil existe para evitar.
+    #   [fan] off_below 0.10 -> cualquier duty entre 1% y 9% se apaga entero.
+    #     O sea que la mitad de abajo de la rampa 0-15 no se ejecutaba nunca:
+    #     lo que el perfil declaraba como gradual, la maquina lo hacia binario.
+    #
+    # Con 15/15 el ventilador paga UN kick, en la capa 4, y despues no vuelve a
+    # cruzar el umbral. Y 15% constante es lo que el ABS quiere de todas formas.
     close_fan_the_first_x_layers=("3",), full_fan_speed_layer=("0",),
-    fan_min_speed=("0",), fan_max_speed=("15",), fan_cooling_layer_time=("20",),
+    fan_min_speed=("15",), fan_max_speed=("15",), fan_cooling_layer_time=("20",),
     overhang_fan_speed=("25",), overhang_fan_threshold=("25%",),
     slow_down_layer_time=("15",), slow_down_min_speed=("20",),
     filament_retraction_length=("0.6",), filament_retraction_speed=("35",),
